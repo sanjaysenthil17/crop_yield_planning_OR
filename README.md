@@ -1,68 +1,36 @@
-<div align="center">
-  <img src="assets/header.svg" width="800" alt="Sanjay Senthil AI Engineer Banner" />
-</div>
+# 🌾 Optimal Agricultural Crop Planning
 
-<img src="assets/divider.svg" width="100%" alt="divider" />
+**Operations Research: Linear & Goal Programming Approach**
 
-`[ SYSTEM STATUS ]` 🟢 **Open to work** | 🏢 Final Year Student | 🏗️ Currently building: **[Project Name]**
+This repository contains the First Review and Final Implementation files for our Agricultural Operations Research project. The project aims to build a mathematical decision-support system that helps farmers optimally allocate cultivable land among various crops while strictly adhering to resource limitations (land, fertilizer, pesticide).
 
-<img src="assets/divider.svg" width="100%" alt="divider" />
+## 📊 About the Project
+Traditional crop planning often relies on intuition. By using **Operations Research (OR)**, we can mathematically guarantee the most efficient use of resources. We use 23 years of historical Indian agricultural data to extract yield and resource parameters. 
 
-### 🚀 Featured Work
+Our optimization engine utilizes:
+1. **Linear Programming (LP):** To find the absolute maximum theoretical production.
+2. **Goal Programming (GP):** To balance multiple, often conflicting real-world targets (e.g., hitting a specific production quota while strictly minimizing chemical/pesticide usage).
 
-**[Real-Time Multimodal Emotion Detection](https://github.com/sanjaysenthil17/Real-Time-Multimodal-Emotion-Detection-with-YOLO-ViT-and-Spark-Streaming)** 
-Problem: Needed a scalable pipeline for real-time edge-to-cloud emotion analytics.
-Built: (Python, YOLO, ViT, Spark Structured Streaming, HDFS, Scala). 
-Result: Built an end-to-end pipeline syncing webcam frames to HDFS, processing Bronze/Silver/Gold layers for windowed KPIs. 
-[Repo](https://github.com/sanjaysenthil17/Real-Time-Multimodal-Emotion-Detection-with-YOLO-ViT-and-Spark-Streaming)
+## 🚀 Live Dashboard
+An interactive Streamlit dashboard is built to make the optimization accessible to non-technical users.
+- View Exploratory Data Analysis (EDA)
+- Run the LP and GP Solvers (Final Review)
+- Compare Resource Utilization tradeoffs interactively
 
-**[Music Emotion Recognition](https://github.com/sanjaysenthil17/Music-Emotion-Recognition-using-CNN-and-HuBert)** 
-Problem: Extracting nuanced emotional signals from raw audio waveforms.
-Built: (Python, CNNs, HuBert). 
-Result: Implemented state-of-the-art audio models to accurately classify music emotion. 
-[Repo](https://github.com/sanjaysenthil17/Music-Emotion-Recognition-using-CNN-and-HuBert)
+## 👥 Meet the Team
+This project is a collaborative effort by our team. Each member is responsible for a core module of the pipeline:
 
-**[Monte Carlo Simulation in Supply Chain](https://github.com/sanjaysenthil17/Monte-Carlo-Simulation-in-supply-chain-management)** 
-Problem: Unpredictable variables leading to supply chain inefficiencies and stockouts.
-Built: (Python, Monte Carlo Methods). 
-Result: Simulated probabilistic outcomes to optimize supply chain decision-making under uncertainty. 
-[Repo](https://github.com/sanjaysenthil17/Monte-Carlo-Simulation-in-supply-chain-management)
+| Team Member | GitHub Profile | Core Focus & Responsibilities |
+| :--- | :--- | :--- |
+| **Vignesh V S** | [@VigneshVS2005](https://github.com/VigneshVS2005) | Linear Programming Model, Decision Variables, Objective Functions & LP Solver Code |
+| **Karthick Ruban** | [@Karthickruban](https://github.com/Karthickruban) | Goal Programming Model, Deviation Variables, Goal Weighting & GP Solver Code |
+| **Hariprakash** | [@Hariprakash024](https://github.com/Hariprakash024) | Streamlit UI Development, Plotly Visualizations, System Integration & Dashboard |
+| **Sanjay Senthil** | [@sanjaysenthil17](https://github.com/sanjaysenthil17) | Dataset Acquisition, Data Cleaning, Exploratory Data Analysis & Parameter Calculations |
 
-<img src="assets/divider.svg" width="100%" alt="divider" />
+Please see [CONTRIBUTORS.md](CONTRIBUTORS.md) for more details.
 
-### 💻 Core Stack
-
-- **ML & Data:** Python, PyTorch, Scikit-Learn, Pandas, SQL
-- **Backend & Infra:** FastAPI, Node.js, Docker, AWS (EC2, S3)
-- **Tools:** Git, GitHub Actions, Linux/Bash, Terraform
-
-<img src="assets/divider.svg" width="100%" alt="divider" />
-
-### 📡 Live Feed
-<!-- LATEST_COMMIT_START -->
-> ⚡ Latest Commit: sanjaysenthil17/portfolio - "chore: update build configs" (2h ago)
-<!-- LATEST_COMMIT_END -->
-
-### 🧠 Neural Activity (Last 365 Days)
-<div align="center">
-  <img src="assets/neural_graph.svg" width="800" alt="Contribution Graph" />
-</div>
-
-<img src="assets/divider.svg" width="100%" alt="divider" />
-
-### 🧠 How I Approach Engineering
-I believe in starting with the simplest baseline model before reaching for complex architectures. My focus is on writing clean, modular code that bridges the gap between data science and production engineering. To me, a model isn't finished until it's deployed and monitored in the real world.
-
-<details>
-<summary>📂 <b>Background & Extras</b></summary>
-<br>
-
-- **Education:** [Degree] in [Major], [University] (Expected 202X)
-- **Research:** [Paper/Topic Name] - [Short description of findings]
-- **Certifications:** [e.g., AWS Certified Machine Learning Specialty]
-- **Personal:** [Authentic detail, e.g., I restore vintage mechanical keyboards in my free time.]
-</details>
-
-<img src="assets/divider.svg" width="100%" alt="divider" />
-
-[Portfolio](https://sanjaysenthil17.github.io/) • [LinkedIn](https://linkedin.com/in/sanjay-senthil-367909308) • [Email](mailto:ssanjaychakravar@gmail.com)
+## 🛠️ Tech Stack
+- **Languages:** Python
+- **Data Processing:** Pandas, NumPy
+- **Operations Research Solvers:** PuLP / Google OR-Tools
+- **UI & Visualization:** Streamlit, Plotly Express
