@@ -290,10 +290,10 @@ elif nav == "8. Team Contribution":
     st.markdown("""
     | Team Member | GitHub Profile | Core Focus & Responsibilities |
     | :--- | :--- | :--- |
-    | **Vignesh V S (Vignesh Saminathan)** | [@VigneshVS2005](https://github.com/VigneshVS2005) | Project Owner, YOLO/ViT Model Architecture & Spark Union Streaming |
-    | **Karthick Ruban** | [@Karthickruban](https://github.com/Karthickruban) | Scala Image Preprocessing, HDFS Optimization, & Columnar Parquet |
-    | **Hariprakash** | [@Hariprakash024](https://github.com/Hariprakash024) | Real-time Webcam Edge Producers, Face Localization, OpenCV |
-    | **Sanjay Senthil** | [@sanjaysenthil17](https://github.com/sanjaysenthil17) | Medallion Pipeline (Bronze/Silver/Gold), KPIs, & Validation |
+    | **Vignesh V S** | [@VigneshVS2005](https://github.com/VigneshVS2005) | Linear Programming Model, Decision Variables, Objective Functions & LP Solver Code |
+    | **Karthick Ruban** | [@Karthickruban](https://github.com/Karthickruban) | Goal Programming Model, Deviation Variables, Goal Weighting & GP Solver Code |
+    | **Hariprakash** | [@Hariprakash024](https://github.com/Hariprakash024) | Streamlit UI Development, Plotly Visualizations, System Integration & Dashboard |
+    | **Sanjay Senthil** | [@sanjaysenthil17](https://github.com/sanjaysenthil17) | Dataset Acquisition, Data Cleaning, Exploratory Data Analysis & Parameter Calculations |
     """)
     
     st.markdown("---")
