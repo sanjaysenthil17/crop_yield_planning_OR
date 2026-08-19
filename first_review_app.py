@@ -1,275 +1,265 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 
-# Page Config
-st.set_page_config(page_title="First Review: Crop Planning OR", layout="wide")
+st.set_page_config(page_title="Operations Research: Crop Planning", layout="wide", initial_sidebar_state="expanded")
 
-st.title("Optimal Agricultural Crop Planning")
-st.subheader("Using Linear Programming and Goal Programming (First Review Demo)")
+# --- Custom CSS for bigger and more beautiful layout ---
+st.markdown("""
+<style>
+    .main-title { font-size: 3rem !important; font-weight: 700; color: #1E3A8A; text-align: center; margin-bottom: 0;}
+    .sub-title { font-size: 1.5rem !important; color: #3B82F6; text-align: center; margin-top: 0; padding-bottom: 2rem;}
+    .section-header { font-size: 2rem !important; color: #111827; border-bottom: 2px solid #E5E7EB; padding-bottom: 0.5rem; margin-top: 2rem;}
+    .highlight-box { background-color: #EFF6FF; padding: 1.5rem; border-radius: 0.5rem; border-left: 5px solid #3B82F6; margin: 1rem 0;}
+</style>
+""", unsafe_allow_html=True)
 
+st.markdown('<p class="main-title">🌾 Optimal Agricultural Crop Planning</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Operations Research: Linear & Goal Programming (First Review)</p>', unsafe_allow_html=True)
 st.markdown("---")
 
-# Sidebar for Navigation
-st.sidebar.title("Navigation")
-nav = st.sidebar.radio("Go to", [
-    "1. Introduction & Problem", 
-    "2. Dataset & EDA", 
-    "3. Methodology & OR Concept",
-    "4. Proposed Final System (Mockup)",
-    "5. Team Contribution"
-])
+# Navigation
+st.sidebar.title("📌 Navigation")
+pages = [
+    "1. Introduction & Objectives",
+    "2. Literature Review",
+    "3. Dataset & Advanced EDA",
+    "4. Methodology Flow",
+    "5. Linear Programming (LP)",
+    "6. Goal Programming (GP)",
+    "7. Proposed Final Dashboard",
+    "8. Team Contribution"
+]
+nav = st.sidebar.radio("Go to Section:", pages)
 
-# 1. Introduction
-if nav == "1. Introduction & Problem":
-    st.header("Project Introduction")
-    st.write("""
-    Agricultural crop planning is the process of deciding which crops to plant and how much land to allocate to each. 
-    In India, farmers have limited resources to work with:
-    - **Land:** A fixed amount of cultivable area.
-    - **Fertilizer & Pesticide:** Limited quantities or budgets.
-    - **Water:** Dependent on rainfall and irrigation.
+# --- 1. Introduction & Objectives ---
+if nav == "1. Introduction & Objectives":
+    st.markdown('<p class="section-header">Problem Statement</p>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="highlight-box">
+    <b>"Given historical crop yields, resource requirements (fertilizer, pesticide, water), and strict land availability, how can we mathematically allocate available land among selected crops to maximize expected production while satisfying all resource limitations?"</b>
+    </div>
+    """, unsafe_allow_html=True)
     
-    Different crops have varying yield rates and resource requirements. Our project aims to use **Operations Research** 
-    to help decide how available land can be allocated among selected crops to obtain good expected production while respecting resource limitations.
-    """)
-    
-    st.header("Problem Statement")
-    st.info("""
-    **"Given historical crop and resource data, how can available land be allocated among selected crops 
-    to obtain good expected production while respecting resource limitations?"**
-    """)
-    st.write("""
-    Later in the final project, we will use:
-    - **Linear Programming (LP):** For maximizing expected total production.
-    - **Goal Programming (GP):** For finding a balanced solution when we have multiple competing goals.
-    """)
-    
-    st.header("Project Significance")
-    st.write("""
-    - Better utilization of limited agricultural resources
-    - Data-driven crop planning
-    - Understanding crop yield and production patterns
-    - Helping compare different crop planning scenarios
-    - Demonstrating how Operations Research can be applied to a real-world agricultural problem
-    """)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("🎯 Primary Objectives")
+        st.write("""
+        1. **Data-Driven Insights:** Analyze 23 years of Indian agricultural data to identify high-yield crops.
+        2. **Resource Optimization:** Maximize total crop production using **Linear Programming (LP)**.
+        3. **Balanced Decision Making:** Use **Goal Programming (GP)** to balance multiple conflicting goals, such as maximizing production while minimizing chemical (fertilizer/pesticide) usage.
+        """)
+    with col2:
+        st.subheader("💡 Why is this important?")
+        st.write("""
+        - Farmers often rely on intuition, leading to over-utilization or under-utilization of land.
+        - Environmental constraints demand stricter limits on fertilizers and pesticides.
+        - Operations Research provides a mathematical guarantee of the *optimal* farming strategy.
+        """)
 
-# 2. Dataset & EDA
-elif nav == "2. Dataset & EDA":
-    st.header("Dataset Section")
-    st.write("We are using the 'Agricultural Crop Yield in Indian States Dataset' (1997–2020).")
+# --- 2. Literature Review ---
+elif nav == "2. Literature Review":
+    st.markdown('<p class="section-header">Literature Review</p>', unsafe_allow_html=True)
+    st.write("We studied several papers applying Operations Research to agriculture to guide our project:")
+    
+    st.info("**1. Optimization of Crop Planning using Linear Programming (Sharma et al.)**  \n*Key Takeaway:* LP is highly effective in maximizing monetary profit or pure yield by allocating land based on constraints like water and labor.")
+    st.info("**2. Multicriteria Decision Making in Agriculture using Goal Programming (Romero & Rehman)**  \n*Key Takeaway:* Farmers rarely have a single objective. GP is necessary when trying to hit a production quota while also minimizing environmental impact (e.g., nitrogen runoff).")
+    st.info("**3. Yield Prediction and Resource Allocation (Indian Context)**  \n*Key Takeaway:* Regional variations (State, Season) heavily impact yield. It is critical to calculate parameters (expected yield, fertilizer per hectare) specific to the state and season being optimized.")
+
+# --- 3. Dataset & Advanced EDA ---
+elif nav == "3. Dataset & Advanced EDA":
+    st.markdown('<p class="section-header">Dataset & Interactive Exploratory Data Analysis</p>', unsafe_allow_html=True)
     
     try:
         df = pd.read_csv("crop_yield.csv")
-        st.success("Dataset loaded successfully!")
+        st.success("✅ Real Dataset Loaded Successfully! (Agricultural Crop Yield in Indian States 1997–2020)")
         
-        st.subheader("Dataset Overview (First 10 Rows)")
-        st.dataframe(df.head(10))
+        st.subheader("Data Snapshot")
+        st.dataframe(df.head(10), use_container_width=True)
         
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Rows", df.shape[0])
-        col2.metric("Total Columns", df.shape[1])
-        col3.metric("Unique Crops", df['Crop'].nunique())
-        col4.metric("Unique States", df['State'].nunique())
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Records", f"{len(df):,}")
+        c2.metric("Features (Columns)", df.shape[1])
+        c3.metric("States Covered", df['State'].nunique())
+        c4.metric("Unique Crops", df['Crop'].nunique())
         
-        st.subheader("Dataset Explanation")
-        st.write("""
-        - **Crop:** Name of crop
-        - **Crop_Year:** Year of cultivation
-        - **Season:** Agricultural season
-        - **State:** Indian state
-        - **Area:** Cultivated area in hectares
-        - **Production:** Production in metric tons
-        - **Annual_Rainfall:** Rainfall in millimetres
-        - **Fertilizer & Pesticide:** Usage in kilograms
-        - **Yield:** Production per unit area
-        """)
+        st.markdown("### 📊 Interactive Visualizations")
         
-        st.subheader("Exploratory Data Analysis (EDA)")
+        # Filter for top 10 crops to make graphs readable
+        top_crops = df['Crop'].value_counts().head(10).index
+        df_top = df[df['Crop'].isin(top_crops)]
         
-        try:
-            import plotly.express as px
+        col_chart1, col_chart2 = st.columns(2)
+        with col_chart1:
+            prod_by_crop = df_top.groupby('Crop')['Production'].sum().reset_index()
+            fig1 = px.bar(prod_by_crop, x='Crop', y='Production', title='Total Historical Production (Top 10 Crops)', color='Crop')
+            st.plotly_chart(fig1, use_container_width=True)
             
-            c1, c2 = st.columns(2)
+            yield_by_state = df.groupby('State')['Yield'].mean().reset_index().sort_values('Yield', ascending=False).head(10)
+            fig3 = px.bar(yield_by_state, x='State', y='Yield', title='Top 10 States by Average Yield', color='State')
+            st.plotly_chart(fig3, use_container_width=True)
             
-            with c1:
-                # Crop distribution
-                crop_counts = df['Crop'].value_counts().reset_index()
-                crop_counts.columns = ['Crop', 'Count']
-                fig1 = px.pie(crop_counts, values='Count', names='Crop', title="Crop Distribution")
-                st.plotly_chart(fig1, use_container_width=True)
-                
-                # Average Yield by Crop
-                yield_data = df.groupby('Crop')['Yield'].mean().reset_index()
-                fig3 = px.bar(yield_data, x='Crop', y='Yield', title="Average Yield by Crop (tons/ha)")
-                st.plotly_chart(fig3, use_container_width=True)
-                
-            with c2:
-                # State-wise production
-                state_prod = df.groupby('State')['Production'].sum().reset_index()
-                fig2 = px.bar(state_prod, x='State', y='Production', title="Total Production by State")
-                st.plotly_chart(fig2, use_container_width=True)
-                
-                # Rainfall vs Yield
-                fig4 = px.scatter(df, x='Annual_Rainfall', y='Yield', color='Crop', title="Rainfall vs Yield")
-                st.plotly_chart(fig4, use_container_width=True)
-                
-        except ImportError:
-            st.warning("Please install Plotly (`pip install plotly`) to view the interactive charts.")
+        with col_chart2:
+            fig2 = px.pie(df_top, names='Season', title='Crop Distribution by Season')
+            st.plotly_chart(fig2, use_container_width=True)
+            
+            # Scatter plot taking a sample for performance
+            fig4 = px.scatter(df_top.sample(2000, random_state=42), x='Annual_Rainfall', y='Yield', color='Crop', title='Rainfall vs. Yield (Sampled)')
+            st.plotly_chart(fig4, use_container_width=True)
             
     except FileNotFoundError:
-        st.error("Dataset 'crop_dataset.csv' not found. Please ensure the file is in the same directory.")
+        st.error("Dataset 'crop_yield.csv' not found. Please ensure it is in the same directory.")
+
+# --- 4. Methodology Flow ---
+elif nav == "4. Methodology Flow":
+    st.markdown('<p class="section-header">Project Methodology</p>', unsafe_allow_html=True)
+    st.write("Our project follows a structured data-to-decision pipeline.")
+    
+    st.markdown("""
+    ```mermaid
+    flowchart TD
+        A[Dataset Collection & Cleaning] --> B[Exploratory Data Analysis]
+        B --> C[Parameter Calculation: Average Yield, Fertilizer/ha, Pesticide/ha]
+        C --> D[Define Decision Variables]
         
-    st.header("Research / Planning Questions")
-    st.write("""
-    **Questions answered through dataset analysis in the FIRST REVIEW:**
-    - Which crops have the highest average yield?
-    - Which crops have the highest production?
-    - How does crop production vary across states and seasons?
-    - What is the relationship between rainfall and crop yield?
-    
-    **Optimization questions that will be addressed in the FINAL PROJECT:**
-    - Which crops appear more suitable when land is limited?
-    - How can available land eventually be allocated among selected crops?
-    - How can we maximize expected production under land, fertilizer and pesticide constraints?
-    - How can we balance multiple objectives using Goal Programming?
+        D --> E{Choose Optimization Model}
+        E --> F[Linear Programming Formulation]
+        E --> G[Goal Programming Formulation]
+        
+        F --> H[Maximize Total Production]
+        G --> I[Minimize Goal Deviations]
+        
+        H --> J[Compare Results in Dashboard]
+        I --> J
+        
+        J --> K[Final Optimal Land Allocation Recommendation]
+        
+        style A fill:#bfdbfe,stroke:#2563eb,stroke-width:2px
+        style B fill:#bfdbfe,stroke:#2563eb,stroke-width:2px
+        style C fill:#bfdbfe,stroke:#2563eb,stroke-width:2px
+        style J fill:#fcd34d,stroke:#d97706,stroke-width:2px
+        style K fill:#86efac,stroke:#16a34a,stroke-width:2px
+    ```
     """)
+    st.info("📌 **First Review Focus:** Steps A, B, C, and D are complete. The mathematical formulations (F, G) are designed. Implementations (H, I, J, K) are planned for the Final Review.")
 
-# 3. Methodology & OR Concept
-elif nav == "3. Methodology & OR Concept":
-    st.header("Methodology")
-    st.write("""
-    1. Dataset Collection
-    2. Data Cleaning
-    3. Exploratory Data Analysis **<-- (Current First Review Focus)**
-    4. Calculate Historical Yield and Resource Parameters
-    5. Define Decision Variables
-    6. Linear Programming Formulation
-    7. Goal Programming Formulation
-    8. Compare Solutions
-    9. Final Crop Planning Recommendation
-    """)
+# --- 5. Linear Programming (LP) ---
+elif nav == "5. Linear Programming (LP)":
+    st.markdown('<p class="section-header">Linear Programming Approach (Pure Maximization)</p>', unsafe_allow_html=True)
     
-    st.header("Operations Research Concept (Our Approach)")
-    
-    st.subheader("1. Linear Programming (LP) Approach")
-    st.write("""
-    **Objective:** Maximize total crop production.
-    - Let **$x_i$** be the land (in hectares) allocated to crop $i$.
-    - Let **$Y_i$** be the expected yield (tons/ha) of crop $i$.
-    
-    **Maximize:** $Z = \sum (Y_i \cdot x_i)$
-    
-    **Subject to Constraints:**
-    1. **Land Availability:** $\sum x_i \leq \text{Total Land}$
-    2. **Fertilizer Limit:** $\sum (F_i \cdot x_i) \leq \text{Max Fertilizer}$
-    3. **Pesticide Limit:** $\sum (P_i \cdot x_i) \leq \text{Max Pesticide}$
-    4. **Non-negativity:** $x_i \geq 0$
-    """)
-    
-    st.subheader("2. Goal Programming (GP) Approach")
-    st.write("""
-    In the real world, farmers don't just want to maximize yield at all costs. They have multiple, sometimes conflicting goals:
-    - **Goal 1:** Achieve a target production level.
-    - **Goal 2:** Minimize excess fertilizer usage (environmental constraint).
-    - **Goal 3:** Ensure a minimum quota for a staple crop (e.g., Rice).
-    
-    **Approach:** 
-    Goal Programming introduces deviation variables ($d^+$ for overachievement, $d^-$ for underachievement). 
-    Our objective becomes to **Minimize the weighted sum of unwanted deviations** from these goals.
-    """)
-    
-    st.info("💡 In the Final Review, we will run both models side-by-side to show how GP provides a more balanced real-world solution compared to LP's pure maximization.")
-    
-    st.header("Tools and Technologies")
-    st.write("""
-    - **Python:** main programming language
-    - **Pandas:** dataset loading and cleaning
-    - **NumPy:** numerical calculations
-    - **PuLP / OR-Tools:** future optimization solver
-    - **Streamlit:** UI and dashboard framework
-    - **Plotly:** data visualizations
-    - **Antigravity:** AI-assisted development
-    """)
-
-# 4. Proposed Final System
-elif nav == "4. Proposed Final System (Mockup)":
-    st.header("Proposed Final System (Future Implementation)")
-    st.info("NOTE: This is a mockup of the UI for the Final Review. The optimization engine is not running yet.")
-    
-    col1, col2 = st.columns([1, 2])
-    
+    col1, col2 = st.columns([1.5, 1])
     with col1:
-        st.subheader("User Inputs (Mock)")
-        st.selectbox("Select State", ["Andhra Pradesh", "Karnataka", "Tamil Nadu", "Maharashtra"])
-        st.selectbox("Select Season", ["Kharif", "Rabi", "Whole Year"])
-        st.multiselect("Select Crops", ["Rice", "Wheat", "Maize", "Cotton", "Sugarcane"], default=["Rice", "Wheat"])
+        st.markdown("""
+        ### Mathematical Formulation
+        **Decision Variables:** Let **$x_i$** be the land (in hectares) allocated to crop $i$.
         
-        st.number_input("Total Land Available (Hectares)", value=10000)
-        st.number_input("Max Fertilizer Available (kg)", value=500000)
-        st.number_input("Max Pesticide Available (kg)", value=20000)
+        **Objective Function:** Maximize the total production output.
+        - Maximize: **$Z = \sum (Yield_i \cdot x_i)$**
         
-        st.button("Run Optimization Engine (Coming Soon)", disabled=True)
-        
-    with col2:
-        st.subheader("Expected Final Outputs")
-        st.write("""
-        Once the Linear Programming and Goal Programming models are implemented, this section will display:
-        - **Optimal crop allocation** (how many hectares per crop)
-        - **Expected production** (in metric tons)
-        - **Land used vs Land available**
-        - **Fertilizer and Pesticide utilized**
-        - **LP vs Goal Programming comparison charts**
+        **Subject to strict constraints:**
+        1. **Land:** $\sum x_i \leq Available\_Land$
+        2. **Fertilizer:** $\sum (Fertilizer\_per\_ha_i \cdot x_i) \leq Max\_Fertilizer$
+        3. **Pesticide:** $\sum (Pesticide\_per\_ha_i \cdot x_i) \leq Max\_Pesticide$
+        4. **Non-negativity:** $x_i \geq 0$
         """)
         
-        st.info("📊 Optimization Results (LP vs GP) and comparison charts will be displayed here in the Final Review.")
+    with col2:
+        st.markdown("### Conceptual LP Graph")
+        st.write("The algorithm finds the optimal point at the intersection of our strict constraints.")
+        # Dummy LP feasible region graph
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=[0, 10, 0], y=[10, 0, 0], fill='toself', name='Feasible Region', fillcolor='rgba(59, 130, 246, 0.3)'))
+        fig.update_layout(title="Feasible Region (Mock)", xaxis_title="Crop 1 (ha)", yaxis_title="Crop 2 (ha)")
+        st.plotly_chart(fig, use_container_width=True)
+
+# --- 6. Goal Programming (GP) ---
+elif nav == "6. Goal Programming (GP)":
+    st.markdown('<p class="section-header">Goal Programming Approach (Balanced Multi-Criteria)</p>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([1.5, 1])
+    with col1:
+        st.markdown("""
+        ### Why GP?
+        LP pushes everything to the extreme to maximize production, which might drain the entire fertilizer budget on one high-yield crop. GP allows us to balance multiple targets.
         
-        # Add mock interactive graphs to make it look good for the first review
-        try:
-            import plotly.graph_objects as go
-            
-            st.markdown("### Mock Optimization Results Preview")
-            
-            # Mock Data for LP vs GP
-            crops = ["Rice", "Wheat"]
-            lp_alloc = [6000, 4000]
-            gp_alloc = [5000, 5000]
-            
-            fig = go.Figure(data=[
-                go.Bar(name='LP Allocation (Max Production)', x=crops, y=lp_alloc, marker_color='#1f77b4'),
-                go.Bar(name='GP Allocation (Balanced Goals)', x=crops, y=gp_alloc, marker_color='#ff7f0e')
-            ])
-            fig.update_layout(barmode='group', title='Mock Comparison: LP vs GP Land Allocation (Hectares)')
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Mock pie chart for resource usage
-            fig_pie = go.Figure(data=[go.Pie(labels=['Land Used', 'Land Unused'], values=[10000, 0], hole=.3)])
-            fig_pie.update_layout(title='Mock Resource Utilization (Land)')
-            st.plotly_chart(fig_pie, use_container_width=True)
-            
-        except ImportError:
-            pass
-elif nav == "5. Team Contribution":
-    st.header("Team Contribution")
+        ### Mathematical Formulation
+        **Deviation Variables:** 
+        - $d_i^+$ : Overachievement of a goal.
+        - $d_i^-$ : Underachievement of a goal.
+        
+        **Goals:**
+        - **Goal 1 (Production Target $T_p$):** $\sum (Yield_i \cdot x_i) + d_1^- - d_1^+ = T_p$
+        - **Goal 2 (Fertilizer Limit $T_f$):** $\sum (Fertilizer_i \cdot x_i) + d_2^- - d_2^+ = T_f$
+        
+        **Objective Function:** Minimize the weighted sum of unwanted deviations.
+        - Minimize: **$Z = W_1 \cdot d_1^- + W_2 \cdot d_2^+$**
+        *(We want to minimize falling short of production, and minimize going over our chemical limits).*
+        """)
+        
+    with col2:
+        st.markdown("### GP vs LP Expected Behavior")
+        st.write("GP spreads the risk and resources much more evenly across crops to hit multiple targets.")
+        # Mock GP vs LP radar chart
+        categories = ['Production', 'Chemical Efficiency', 'Crop Diversity', 'Land Utilization']
+        fig = go.Figure()
+        fig.add_trace(go.Scatterpolar(r=[100, 40, 30, 100], theta=categories, fill='toself', name='Linear Prog.'))
+        fig.add_trace(go.Scatterpolar(r=[80, 90, 85, 95], theta=categories, fill='toself', name='Goal Prog.'))
+        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100])), title="Trade-off Comparison")
+        st.plotly_chart(fig, use_container_width=True)
+
+# --- 7. Proposed Final Dashboard ---
+elif nav == "7. Proposed Final Dashboard":
+    st.markdown('<p class="section-header">Proposed Final System Architecture</p>', unsafe_allow_html=True)
+    st.info("⚙️ **Note:** This tab is a conceptual mockup. The actual LP and GP engines will be wired up here for the Final Review.")
     
-    st.write("**Sanjay:**")
-    st.write("- Dataset, Data preprocessing, Statistics, Charts, Parameter calculations")
+    st.markdown("### 🎛️ Optimization Control Panel")
+    c1, c2, c3 = st.columns(3)
+    c1.selectbox("Target State", ["Andhra Pradesh", "Karnataka", "Tamil Nadu", "Maharashtra"])
+    c2.selectbox("Season", ["Kharif", "Rabi", "Whole Year"])
+    c3.multiselect("Crops to Consider", ["Rice", "Wheat", "Maize", "Cotton", "Sugarcane"], default=["Rice", "Wheat", "Maize"])
     
-    st.write("**Vignesh:**")
-    st.write("- Linear Programming, Decision variables, Objective function, Constraints, LP solver")
+    st.markdown("#### 📏 Resource Constraints")
+    rc1, rc2, rc3 = st.columns(3)
+    rc1.slider("Available Land (Hectares)", 1000, 50000, 10000)
+    rc2.slider("Max Fertilizer (kg)", 10000, 1000000, 500000)
+    rc3.slider("Max Pesticide (kg)", 1000, 50000, 20000)
     
-    st.write("**Ruban:**")
-    st.write("- Goal Programming, Multiple goals, Deviation variables, Priorities/weights, GP results")
-    
-    st.write("**Hari:**")
-    st.write("- UI and integration, Streamlit dashboard, User inputs, Charts, Connecting modules")
+    st.button("🚀 Run Optimization Engine (Final Review)", use_container_width=True)
     
     st.markdown("---")
-    st.header("Final Review Boundary")
-    st.success("""
-    **First Review Focus:**
-    Understanding the problem, dataset, research questions, methodology and planned Operations Research approach.
+    st.markdown("### 📊 Expected Output Dashboard (Mockup)")
     
-    **Final Review Focus:**
-    Implementation of Linear Programming and Goal Programming, optimization results, interpretation, dashboard and final recommendations.
-    """)
+    out1, out2 = st.columns(2)
+    with out1:
+        # Mock LP vs GP Bar chart
+        fig = go.Figure(data=[
+            go.Bar(name='LP Allocation (ha)', x=['Rice', 'Wheat', 'Maize'], y=[7000, 3000, 0]),
+            go.Bar(name='GP Allocation (ha)', x=['Rice', 'Wheat', 'Maize'], y=[4000, 3500, 2500])
+        ])
+        fig.update_layout(barmode='group', title="Land Allocation Recommendation")
+        st.plotly_chart(fig, use_container_width=True)
+    with out2:
+        # Mock resource usage
+        fig2 = go.Figure(data=[
+            go.Bar(name='Used', x=['Land', 'Fertilizer', 'Pesticide'], y=[100, 98, 40]),
+            go.Bar(name='Remaining', x=['Land', 'Fertilizer', 'Pesticide'], y=[0, 2, 60])
+        ])
+        fig2.update_layout(barmode='stack', title="Resource Utilization (%)")
+        st.plotly_chart(fig2, use_container_width=True)
+
+# --- 8. Team Contribution ---
+elif nav == "8. Team Contribution":
+    st.markdown('<p class="section-header">Team Responsibilities</p>', unsafe_allow_html=True)
+    
+    t1, t2, t3, t4 = st.columns(4)
+    t1.success("**Sanjay**\n\nDataset Acquisition\n\nData Cleaning\n\nExploratory Data Analysis\n\nParameter Calculations")
+    t2.info("**Vignesh**\n\nLinear Programming Model\n\nDecision Variables\n\nObjective Functions\n\nLP Solver Code")
+    t3.warning("**Ruban**\n\nGoal Programming Model\n\nDeviation Variables\n\nGoal Weighting\n\nGP Solver Code")
+    t4.error("**Hari**\n\nStreamlit UI Development\n\nPlotly Visualizations\n\nSystem Integration\n\nDashboard Finalization")
+    
+    st.markdown("---")
+    st.markdown("### 🏁 First Review Boundary")
+    st.write("We have successfully identified the dataset, cleaned the data, established the research methodology, and formulated both the Linear Programming and Goal Programming approaches mathematically.")
+    st.write("In the final review, we will present the fully functional optimization engine integrated directly into this dashboard.")
