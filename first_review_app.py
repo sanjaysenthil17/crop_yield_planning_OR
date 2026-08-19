@@ -150,26 +150,36 @@ elif nav == "3. Methodology & OR Concept":
     9. Final Crop Planning Recommendation
     """)
     
-    st.header("Operations Research Concept")
+    st.header("Operations Research Concept (Our Approach)")
+    
+    st.subheader("1. Linear Programming (LP) Approach")
     st.write("""
-    **Decision Variables:**
-    Amount of land allocated to each crop.
-    - `x1` = hectares allocated to Rice
-    - `x2` = hectares allocated to Wheat
+    **Objective:** Maximize total crop production.
+    - Let **$x_i$** be the land (in hectares) allocated to crop $i$.
+    - Let **$Y_i$** be the expected yield (tons/ha) of crop $i$.
     
-    **Objective:**
-    Later, maximize expected total crop production.
+    **Maximize:** $Z = \sum (Y_i \cdot x_i)$
     
-    **Constraints:**
-    - Total available land limit
-    - Fertilizer limit
-    - Pesticide limit
-    - Non-negativity (x >= 0)
-    
-    **Why Goal Programming?**
-    When we have multiple goals, such as production targets and resource-use targets (e.g. minimize chemical usage), 
-    Goal Programming can find a balanced solution.
+    **Subject to Constraints:**
+    1. **Land Availability:** $\sum x_i \leq \text{Total Land}$
+    2. **Fertilizer Limit:** $\sum (F_i \cdot x_i) \leq \text{Max Fertilizer}$
+    3. **Pesticide Limit:** $\sum (P_i \cdot x_i) \leq \text{Max Pesticide}$
+    4. **Non-negativity:** $x_i \geq 0$
     """)
+    
+    st.subheader("2. Goal Programming (GP) Approach")
+    st.write("""
+    In the real world, farmers don't just want to maximize yield at all costs. They have multiple, sometimes conflicting goals:
+    - **Goal 1:** Achieve a target production level.
+    - **Goal 2:** Minimize excess fertilizer usage (environmental constraint).
+    - **Goal 3:** Ensure a minimum quota for a staple crop (e.g., Rice).
+    
+    **Approach:** 
+    Goal Programming introduces deviation variables ($d^+$ for overachievement, $d^-$ for underachievement). 
+    Our objective becomes to **Minimize the weighted sum of unwanted deviations** from these goals.
+    """)
+    
+    st.info("💡 In the Final Review, we will run both models side-by-side to show how GP provides a more balanced real-world solution compared to LP's pure maximization.")
     
     st.header("Tools and Technologies")
     st.write("""
@@ -210,8 +220,7 @@ elif nav == "4. Proposed Final System (Mockup)":
         - **Land used vs Land available**
         - **Fertilizer and Pesticide utilized**
         - **LP vs Goal Programming comparison charts**
-        """)
-        st.image("https://via.placeholder.com/600x300.png?text=Optimization+Results+Dashboard+(Final+Review)", use_column_width=True)
+        st.info("📊 Optimization Results (LP vs GP) and comparison charts will be displayed here in the Final Review.")
 
 # 5. Team Contribution
 elif nav == "5. Team Contribution":
