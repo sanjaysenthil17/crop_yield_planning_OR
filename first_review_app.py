@@ -220,9 +220,35 @@ elif nav == "4. Proposed Final System (Mockup)":
         - **Land used vs Land available**
         - **Fertilizer and Pesticide utilized**
         - **LP vs Goal Programming comparison charts**
+        """)
+        
         st.info("📊 Optimization Results (LP vs GP) and comparison charts will be displayed here in the Final Review.")
-
-# 5. Team Contribution
+        
+        # Add mock interactive graphs to make it look good for the first review
+        try:
+            import plotly.graph_objects as go
+            
+            st.markdown("### Mock Optimization Results Preview")
+            
+            # Mock Data for LP vs GP
+            crops = ["Rice", "Wheat"]
+            lp_alloc = [6000, 4000]
+            gp_alloc = [5000, 5000]
+            
+            fig = go.Figure(data=[
+                go.Bar(name='LP Allocation (Max Production)', x=crops, y=lp_alloc, marker_color='#1f77b4'),
+                go.Bar(name='GP Allocation (Balanced Goals)', x=crops, y=gp_alloc, marker_color='#ff7f0e')
+            ])
+            fig.update_layout(barmode='group', title='Mock Comparison: LP vs GP Land Allocation (Hectares)')
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Mock pie chart for resource usage
+            fig_pie = go.Figure(data=[go.Pie(labels=['Land Used', 'Land Unused'], values=[10000, 0], hole=.3)])
+            fig_pie.update_layout(title='Mock Resource Utilization (Land)')
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        except ImportError:
+            pass
 elif nav == "5. Team Contribution":
     st.header("Team Contribution")
     
