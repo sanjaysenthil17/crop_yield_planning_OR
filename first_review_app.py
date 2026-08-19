@@ -285,13 +285,16 @@ elif nav == "7. Final Dashboard":
 
 # --- 8. Team Contribution ---
 elif nav == "8. Team Contribution":
-    st.markdown('<p class="section-header">Team Responsibilities</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-header">👥 Meet the Team</p>', unsafe_allow_html=True)
     
-    t1, t2, t3, t4 = st.columns(4)
-    t1.success("**Sanjay**\n\nDataset Acquisition\n\nData Cleaning\n\nExploratory Data Analysis\n\nParameter Calculations")
-    t2.info("**Vignesh**\n\nLinear Programming Model\n\nDecision Variables\n\nObjective Functions\n\nLP Solver Code")
-    t3.warning("**Ruban**\n\nGoal Programming Model\n\nDeviation Variables\n\nGoal Weighting\n\nGP Solver Code")
-    t4.error("**Hari**\n\nStreamlit UI Development\n\nPlotly Visualizations\n\nSystem Integration\n\nDashboard Finalization")
+    st.markdown("""
+    | Team Member | GitHub Profile | Core Focus & Responsibilities |
+    | :--- | :--- | :--- |
+    | **Vignesh V S (Vignesh Saminathan)** | [@VigneshVS2005](https://github.com/VigneshVS2005) | Project Owner, YOLO/ViT Model Architecture & Spark Union Streaming |
+    | **Karthick Ruban** | [@Karthickruban](https://github.com/Karthickruban) | Scala Image Preprocessing, HDFS Optimization, & Columnar Parquet |
+    | **Hariprakash** | [@Hariprakash024](https://github.com/Hariprakash024) | Real-time Webcam Edge Producers, Face Localization, OpenCV |
+    | **Sanjay Senthil** | [@sanjaysenthil17](https://github.com/sanjaysenthil17) | Medallion Pipeline (Bronze/Silver/Gold), KPIs, & Validation |
+    """)
     
     st.markdown("---")
     st.markdown("### 🏁 First Review Boundary")
