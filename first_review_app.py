@@ -3,16 +3,27 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from streamlit_option_menu import option_menu
 
 st.set_page_config(page_title="Operations Research: Crop Planning", layout="wide", initial_sidebar_state="expanded")
 
-# --- Custom CSS for bigger and more beautiful layout ---
+# --- Custom CSS for bigger and more beautiful layout (Dark/Light mode compatible) ---
 st.markdown("""
 <style>
-    .main-title { font-size: 3rem !important; font-weight: 700; color: #1E3A8A; text-align: center; margin-bottom: 0;}
-    .sub-title { font-size: 1.5rem !important; color: #3B82F6; text-align: center; margin-top: 0; padding-bottom: 2rem;}
-    .section-header { font-size: 2rem !important; color: #111827; border-bottom: 2px solid #E5E7EB; padding-bottom: 0.5rem; margin-top: 2rem;}
-    .highlight-box { background-color: #EFF6FF; padding: 1.5rem; border-radius: 0.5rem; border-left: 5px solid #3B82F6; margin: 1rem 0;}
+    /* Using Streamlit's native theme colors implicitly by not forcing color tags, except where needed */
+    .main-title { font-size: 3.5rem !important; font-weight: 800; text-align: center; margin-bottom: 0;}
+    .sub-title { font-size: 1.5rem !important; text-align: center; margin-top: 0; padding-bottom: 2rem; opacity: 0.8;}
+    .section-header { font-size: 2.2rem !important; font-weight: bold; border-bottom: 2px solid gray; padding-bottom: 0.5rem; margin-top: 2rem;}
+    
+    /* Make the highlight box adapt nicely */
+    .highlight-box { 
+        padding: 1.5rem; 
+        border-radius: 0.5rem; 
+        border-left: 5px solid #3B82F6; 
+        margin: 1rem 0; 
+        background-color: rgba(59, 130, 246, 0.1); /* Transparent blue for dark/light mode */
+        font-size: 1.2rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -20,22 +31,36 @@ st.markdown('<p class="main-title">🌾 Optimal Agricultural Crop Planning</p>',
 st.markdown('<p class="sub-title">Operations Research: Linear & Goal Programming (First Review)</p>', unsafe_allow_html=True)
 st.markdown("---")
 
-# Navigation
-st.sidebar.title("📌 Navigation")
-pages = [
-    "1. Introduction & Objectives",
-    "2. Literature Review",
-    "3. Dataset & Advanced EDA",
-    "4. Methodology Flow",
-    "5. Linear Programming (LP)",
-    "6. Goal Programming (GP)",
-    "7. Proposed Final Dashboard",
-    "8. Team Contribution"
-]
-nav = st.sidebar.radio("Go to Section:", pages)
+# Beautiful Navigation Menu using streamlit-option-menu
+with st.sidebar:
+    st.markdown("## 🧭 Navigation")
+    nav = option_menu(
+        menu_title=None,
+        options=[
+            "1. Intro & Objectives",
+            "2. Literature Review",
+            "3. Dataset & EDA",
+            "4. Methodology Flow",
+            "5. Linear Programming",
+            "6. Goal Programming",
+            "7. Final Dashboard",
+            "8. Team Contribution"
+        ],
+        icons=[
+            "house", "book", "bar-chart-line", "diagram-3", 
+            "graph-up", "bullseye", "laptop", "people"
+        ],
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#3B82F6", "font-size": "1.2rem"}, 
+            "nav-link": {"font-size": "1.1rem", "text-align": "left", "margin":"5px", "--hover-color": "rgba(59, 130, 246, 0.2)"},
+            "nav-link-selected": {"background-color": "#3B82F6", "color": "white", "icon-color": "white"},
+        }
+    )
 
 # --- 1. Introduction & Objectives ---
-if nav == "1. Introduction & Objectives":
+if nav == "1. Intro & Objectives":
     st.markdown('<p class="section-header">Problem Statement</p>', unsafe_allow_html=True)
     st.markdown("""
     <div class="highlight-box">
@@ -43,17 +68,18 @@ if nav == "1. Introduction & Objectives":
     </div>
     """, unsafe_allow_html=True)
     
+    st.write("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("🎯 Primary Objectives")
-        st.write("""
+        st.info("""
         1. **Data-Driven Insights:** Analyze 23 years of Indian agricultural data to identify high-yield crops.
         2. **Resource Optimization:** Maximize total crop production using **Linear Programming (LP)**.
         3. **Balanced Decision Making:** Use **Goal Programming (GP)** to balance multiple conflicting goals, such as maximizing production while minimizing chemical (fertilizer/pesticide) usage.
         """)
     with col2:
         st.subheader("💡 Why is this important?")
-        st.write("""
+        st.success("""
         - Farmers often rely on intuition, leading to over-utilization or under-utilization of land.
         - Environmental constraints demand stricter limits on fertilizers and pesticides.
         - Operations Research provides a mathematical guarantee of the *optimal* farming strategy.
@@ -69,7 +95,7 @@ elif nav == "2. Literature Review":
     st.info("**3. Yield Prediction and Resource Allocation (Indian Context)**  \n*Key Takeaway:* Regional variations (State, Season) heavily impact yield. It is critical to calculate parameters (expected yield, fertilizer per hectare) specific to the state and season being optimized.")
 
 # --- 3. Dataset & Advanced EDA ---
-elif nav == "3. Dataset & Advanced EDA":
+elif nav == "3. Dataset & EDA":
     st.markdown('<p class="section-header">Dataset & Interactive Exploratory Data Analysis</p>', unsafe_allow_html=True)
     
     try:
@@ -117,6 +143,7 @@ elif nav == "4. Methodology Flow":
     st.markdown('<p class="section-header">Project Methodology</p>', unsafe_allow_html=True)
     st.write("Our project follows a structured data-to-decision pipeline.")
     
+    # Fixed Mermaid syntax for Dark Mode visibility
     st.markdown("""
     ```mermaid
     flowchart TD
@@ -136,17 +163,24 @@ elif nav == "4. Methodology Flow":
         
         J --> K[Final Optimal Land Allocation Recommendation]
         
-        style A fill:#bfdbfe,stroke:#2563eb,stroke-width:2px
-        style B fill:#bfdbfe,stroke:#2563eb,stroke-width:2px
-        style C fill:#bfdbfe,stroke:#2563eb,stroke-width:2px
-        style J fill:#fcd34d,stroke:#d97706,stroke-width:2px
-        style K fill:#86efac,stroke:#16a34a,stroke-width:2px
+        %% Colors optimized for dark and light modes with explicit high-contrast text %%
+        style A fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#ffffff
+        style B fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#ffffff
+        style C fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#ffffff
+        style D fill:#1e293b,stroke:#0f172a,stroke-width:2px,color:#ffffff
+        style E fill:#4b5563,stroke:#374151,stroke-width:2px,color:#ffffff
+        style F fill:#6366f1,stroke:#4338ca,stroke-width:2px,color:#ffffff
+        style G fill:#6366f1,stroke:#4338ca,stroke-width:2px,color:#ffffff
+        style H fill:#10b981,stroke:#047857,stroke-width:2px,color:#ffffff
+        style I fill:#10b981,stroke:#047857,stroke-width:2px,color:#ffffff
+        style J fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#ffffff
+        style K fill:#22c55e,stroke:#15803d,stroke-width:2px,color:#ffffff
     ```
     """)
     st.info("📌 **First Review Focus:** Steps A, B, C, and D are complete. The mathematical formulations (F, G) are designed. Implementations (H, I, J, K) are planned for the Final Review.")
 
 # --- 5. Linear Programming (LP) ---
-elif nav == "5. Linear Programming (LP)":
+elif nav == "5. Linear Programming":
     st.markdown('<p class="section-header">Linear Programming Approach (Pure Maximization)</p>', unsafe_allow_html=True)
     
     col1, col2 = st.columns([1.5, 1])
@@ -175,7 +209,7 @@ elif nav == "5. Linear Programming (LP)":
         st.plotly_chart(fig, use_container_width=True)
 
 # --- 6. Goal Programming (GP) ---
-elif nav == "6. Goal Programming (GP)":
+elif nav == "6. Goal Programming":
     st.markdown('<p class="section-header">Goal Programming Approach (Balanced Multi-Criteria)</p>', unsafe_allow_html=True)
     
     col1, col2 = st.columns([1.5, 1])
@@ -210,7 +244,7 @@ elif nav == "6. Goal Programming (GP)":
         st.plotly_chart(fig, use_container_width=True)
 
 # --- 7. Proposed Final Dashboard ---
-elif nav == "7. Proposed Final Dashboard":
+elif nav == "7. Final Dashboard":
     st.markdown('<p class="section-header">Proposed Final System Architecture</p>', unsafe_allow_html=True)
     st.info("⚙️ **Note:** This tab is a conceptual mockup. The actual LP and GP engines will be wired up here for the Final Review.")
     
