@@ -4,7 +4,8 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from streamlit_option_menu import option_menu
-import pulp
+from pulp import LpProblem, LpVariable, LpMaximize, LpMinimize, lpSum, LpStatus
+import re
 
 st.set_page_config(page_title="Operations Research: Crop Planning", layout="wide", initial_sidebar_state="expanded")
 
@@ -314,43 +315,47 @@ elif nav == "7. Final Dashboard":
             target_pest = g3.number_input("Target Pesticide Limit (kg) [Goal 3]", min_value=10.0, value=15000.0, step=100.0)
         
             if st.button("🚀 Run Operations Research Solvers", use_container_width=True, type="primary"):
+                # Sanitize crop names for PuLP variables
+                def clean_name(name):
+                    return re.sub(r'[^a-zA-Z0-9]', '_', str(name))
+                    
                 # LP Model
-                lp_model = pulp.LpProblem("Maximize_Production", pulp.LpMaximize)
-                lp_vars = pulp.LpVariable.dicts("LP_Crop", selected_crops, lowBound=0, cat='Continuous')
+                lp_model = LpProblem("Maximize_Production", LpMaximize)
+                lp_vars = {c: LpVariable(f"LP_{clean_name(c)}", lowBound=0, cat='Continuous') for c in selected_crops}
                 
-                lp_model += pulp.lpSum([params[c]['Yield'] * lp_vars[c] for c in selected_crops]), "Total_Production"
-                lp_model += pulp.lpSum([lp_vars[c] for c in selected_crops]) <= max_land, "Land_Constraint"
-                lp_model += pulp.lpSum([params[c]['Fertilizer'] * lp_vars[c] for c in selected_crops]) <= max_fert, "Fertilizer_Constraint"
-                lp_model += pulp.lpSum([params[c]['Pesticide'] * lp_vars[c] for c in selected_crops]) <= max_pest, "Pesticide_Constraint"
+                lp_model += lpSum([params[c]['Yield'] * lp_vars[c] for c in selected_crops]), "Total_Production"
+                lp_model += lpSum([lp_vars[c] for c in selected_crops]) <= max_land, "Land_Constraint"
+                lp_model += lpSum([params[c]['Fertilizer'] * lp_vars[c] for c in selected_crops]) <= max_fert, "Fertilizer_Constraint"
+                lp_model += lpSum([params[c]['Pesticide'] * lp_vars[c] for c in selected_crops]) <= max_pest, "Pesticide_Constraint"
                 
                 lp_model.solve()
-                lp_status = pulp.LpStatus[lp_model.status]
+                lp_status_text = LpStatus[lp_model.status]
                 
-                lp_results = {c: lp_vars[c].varValue for c in selected_crops}
+                lp_results = {c: lp_vars[c].varValue if lp_vars[c].varValue is not None else 0.0 for c in selected_crops}
                 lp_total_prod = sum([params[c]['Yield'] * lp_results[c] for c in selected_crops])
                 
                 # GP Model
-                gp_model = pulp.LpProblem("Minimize_Deviations", pulp.LpMinimize)
-                gp_vars = pulp.LpVariable.dicts("GP_Crop", selected_crops, lowBound=0, cat='Continuous')
+                gp_model = LpProblem("Minimize_Deviations", LpMinimize)
+                gp_vars = {c: LpVariable(f"GP_{clean_name(c)}", lowBound=0, cat='Continuous') for c in selected_crops}
                 
-                d_prod_minus = pulp.LpVariable("d_prod_minus", lowBound=0)
-                d_prod_plus = pulp.LpVariable("d_prod_plus", lowBound=0)
-                d_fert_minus = pulp.LpVariable("d_fert_minus", lowBound=0)
-                d_fert_plus = pulp.LpVariable("d_fert_plus", lowBound=0)
-                d_pest_minus = pulp.LpVariable("d_pest_minus", lowBound=0)
-                d_pest_plus = pulp.LpVariable("d_pest_plus", lowBound=0)
+                d_prod_minus = LpVariable("d_prod_minus", lowBound=0)
+                d_prod_plus = LpVariable("d_prod_plus", lowBound=0)
+                d_fert_minus = LpVariable("d_fert_minus", lowBound=0)
+                d_fert_plus = LpVariable("d_fert_plus", lowBound=0)
+                d_pest_minus = LpVariable("d_pest_minus", lowBound=0)
+                d_pest_plus = LpVariable("d_pest_plus", lowBound=0)
                 
-                gp_model += pulp.lpSum([gp_vars[c] for c in selected_crops]) <= max_land, "Land_Constraint"
-                gp_model += pulp.lpSum([params[c]['Yield'] * gp_vars[c] for c in selected_crops]) + d_prod_minus - d_prod_plus == target_prod, "Production_Goal"
-                gp_model += pulp.lpSum([params[c]['Fertilizer'] * gp_vars[c] for c in selected_crops]) + d_fert_minus - d_fert_plus == target_fert, "Fertilizer_Goal"
-                gp_model += pulp.lpSum([params[c]['Pesticide'] * gp_vars[c] for c in selected_crops]) + d_pest_minus - d_pest_plus == target_pest, "Pesticide_Goal"
+                gp_model += lpSum([gp_vars[c] for c in selected_crops]) <= max_land, "Land_Constraint"
+                gp_model += lpSum([params[c]['Yield'] * gp_vars[c] for c in selected_crops]) + d_prod_minus - d_prod_plus == target_prod, "Production_Goal"
+                gp_model += lpSum([params[c]['Fertilizer'] * gp_vars[c] for c in selected_crops]) + d_fert_minus - d_fert_plus == target_fert, "Fertilizer_Goal"
+                gp_model += lpSum([params[c]['Pesticide'] * gp_vars[c] for c in selected_crops]) + d_pest_minus - d_pest_plus == target_pest, "Pesticide_Goal"
                 
                 gp_model += d_prod_minus + d_fert_plus + d_pest_plus, "Total_Deviation"
                 
                 gp_model.solve()
-                gp_status = pulp.LpStatus[gp_model.status]
+                gp_status_text = LpStatus[gp_model.status]
                 
-                gp_results = {c: gp_vars[c].varValue for c in selected_crops}
+                gp_results = {c: gp_vars[c].varValue if gp_vars[c].varValue is not None else 0.0 for c in selected_crops}
                 gp_total_prod = sum([params[c]['Yield'] * gp_results[c] for c in selected_crops])
                 
                 st.markdown("---")
@@ -358,7 +363,7 @@ elif nav == "7. Final Dashboard":
                 
                 out1, out2 = st.columns(2)
                 with out1:
-                    st.success(f"**LP Status:** {lp_status} | Max Production: **{lp_total_prod:,.2f} tons**")
+                    st.success(f"**LP Status:** {lp_status_text} | Max Production: **{lp_total_prod:,.2f} tons**")
                     fig = go.Figure(data=[
                         go.Bar(name='LP Allocation (ha)', x=selected_crops, y=[lp_results[c] for c in selected_crops], marker_color='#1f77b4'),
                         go.Bar(name='GP Allocation (ha)', x=selected_crops, y=[gp_results[c] for c in selected_crops], marker_color='#ff7f0e')
@@ -367,7 +372,7 @@ elif nav == "7. Final Dashboard":
                     st.plotly_chart(fig, use_container_width=True)
                     
                 with out2:
-                    st.info(f"**GP Status:** {gp_status} | Balanced Production: **{gp_total_prod:,.2f} tons**")
+                    st.info(f"**GP Status:** {gp_status_text} | Balanced Production: **{gp_total_prod:,.2f} tons**")
                     lp_land_used = sum([lp_results[c] for c in selected_crops])
                     gp_land_used = sum([gp_results[c] for c in selected_crops])
                     lp_fert_used = sum([params[c]['Fertilizer'] * lp_results[c] for c in selected_crops])
