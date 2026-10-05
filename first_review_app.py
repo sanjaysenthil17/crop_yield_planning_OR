@@ -4,7 +4,6 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from streamlit_option_menu import option_menu
-from pulp import LpProblem, LpVariable, LpMaximize, LpMinimize, lpSum, LpStatus
 import re
 
 st.set_page_config(page_title="Operations Research: Crop Planning", layout="wide", initial_sidebar_state="expanded")
@@ -315,6 +314,11 @@ elif nav == "7. Final Dashboard":
             target_pest = g3.number_input("Target Pesticide Limit (kg) [Goal 3]", min_value=10.0, value=15000.0, step=100.0)
         
             if st.button("🚀 Run Operations Research Solvers", use_container_width=True, type="primary"):
+                try:
+                    from pulp import LpProblem, LpVariable, LpMaximize, LpMinimize, lpSum, LpStatus
+                except ImportError:
+                    st.error("⚠️ The optimization library (PuLP) is not installed yet. Please wait 1-2 minutes for the server to finish installing packages, then refresh the page.")
+                    st.stop()
                 # Sanitize crop names for PuLP variables
                 def clean_name(name):
                     return re.sub(r'[^a-zA-Z0-9]', '_', str(name))
