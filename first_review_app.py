@@ -335,7 +335,7 @@ elif nav == "7. Final Dashboard":
             'Historical Area (ha)': {c: params[c]['Area_hist']  for c in selected_crops},
             'Historical Prod (tons)':{c: params[c]['Prod_hist'] for c in selected_crops},
         })
-        st.dataframe(param_df.style.format("{:.2f}").background_gradient(cmap='Blues', axis=0), use_container_width=True)
+        st.dataframe(param_df.style.format("{:.2f}"), use_container_width=True)
 
         # Coefficient visualization
         st.markdown("#### 📈 Coefficient Comparison Chart")
