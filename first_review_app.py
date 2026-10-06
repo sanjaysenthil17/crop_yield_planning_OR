@@ -518,39 +518,35 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
         min_alloc = (diversity_pct / 100.0) * max_land / n
 
         if use_pulp_solver:
-            pulp_loaded = False
+            pulp_exec_success = False
             try:
                 import pulp
-                pulp_loaded = True
-            except ImportError:
-                st.warning("⚠️ PuLP library is not installed in this environment. Executing PuLP-equivalent formulation via SciPy HiGHS Solver.")
-
-            if pulp_loaded:
                 prob = pulp.LpProblem("PuLP_Goal_Programming", pulp.LpMinimize)
                 
-                # Decision variables
-                x_vars = {c: pulp.LpVariable(f"x_{i}", lowBound=min_alloc, cat='Continuous') for i, c in enumerate(selected_crops)}
+                # Decision variables (cast numpy float to Python float for Python 3.14 compatibility)
+                lb_val = float(min_alloc) if min_alloc is not None else 0.0
+                x_vars = {c: pulp.LpVariable(f"x_{i}", lowBound=lb_val, cat='Continuous') for i, c in enumerate(selected_crops)}
                 
                 # Deviations
-                d1_minus = pulp.LpVariable("d1_minus", lowBound=0)
-                d1_plus  = pulp.LpVariable("d1_plus", lowBound=0)
-                d2_minus = pulp.LpVariable("d2_minus", lowBound=0)
-                d2_plus  = pulp.LpVariable("d2_plus", lowBound=0)
-                d3_minus = pulp.LpVariable("d3_minus", lowBound=0)
-                d3_plus  = pulp.LpVariable("d3_plus", lowBound=0)
+                d1_minus = pulp.LpVariable("d1_minus", lowBound=0.0)
+                d1_plus  = pulp.LpVariable("d1_plus", lowBound=0.0)
+                d2_minus = pulp.LpVariable("d2_minus", lowBound=0.0)
+                d2_plus  = pulp.LpVariable("d2_plus", lowBound=0.0)
+                d3_minus = pulp.LpVariable("d3_minus", lowBound=0.0)
+                d3_plus  = pulp.LpVariable("d3_plus", lowBound=0.0)
                 
                 # Total Land Constraint
-                prob += pulp.lpSum([x_vars[c] for c in selected_crops]) <= max_land, "Land_Limit"
+                prob += pulp.lpSum([x_vars[c] for c in selected_crops]) <= float(max_land), "Land_Limit"
                 
                 # Goal Constraints
-                prob += pulp.lpSum([params[c]['Yield'] * x_vars[c] for c in selected_crops]) + d1_minus - d1_plus == target_prod, "Prod_Goal"
-                prob += pulp.lpSum([params[c]['Fertilizer'] * x_vars[c] for c in selected_crops]) + d2_minus - d2_plus == target_fert, "Fert_Goal"
-                prob += pulp.lpSum([params[c]['Pesticide'] * x_vars[c] for c in selected_crops]) + d3_minus - d3_plus == target_pest, "Pest_Goal"
+                prob += pulp.lpSum([float(params[c]['Yield']) * x_vars[c] for c in selected_crops]) + d1_minus - d1_plus == float(target_prod), "Prod_Goal"
+                prob += pulp.lpSum([float(params[c]['Fertilizer']) * x_vars[c] for c in selected_crops]) + d2_minus - d2_plus == float(target_fert), "Fert_Goal"
+                prob += pulp.lpSum([float(params[c]['Pesticide']) * x_vars[c] for c in selected_crops]) + d3_minus - d3_plus == float(target_pest), "Pest_Goal"
                 
                 # Objective: Minimize weighted sum of unwanted deviations
-                w1 = 10.0 / max(target_prod, 1.0)
-                w2 = 10.0 / max(target_fert, 1.0)
-                w3 = 10.0 / max(target_pest, 1.0)
+                w1 = 10.0 / max(float(target_prod), 1.0)
+                w2 = 10.0 / max(float(target_fert), 1.0)
+                w3 = 10.0 / max(float(target_pest), 1.0)
                 prob += w1 * d1_minus + w2 * d2_plus + w3 * d3_plus, "Total_Deviation"
                 
                 try:
@@ -568,8 +564,11 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
                 d2p = float(pulp.value(d2_plus))  if pulp.value(d2_plus) is not None else 0.0
                 d3m = float(pulp.value(d3_minus)) if pulp.value(d3_minus) is not None else 0.0
                 d3p = float(pulp.value(d3_plus))  if pulp.value(d3_plus) is not None else 0.0
-            else:
-                use_pulp_solver = False # Fall back to SciPy
+
+                pulp_exec_success = True
+            except Exception as ex:
+                st.warning(f"⚠️ PuLP execution notice: {ex}. Falling back to SciPy HiGHS Solver for 100% stability.")
+                use_pulp_solver = False
 
         if not use_pulp_solver:
             if use_multi_crop_goals:
