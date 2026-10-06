@@ -29,7 +29,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="main-title">🌾 Optimal Agricultural Crop Planning</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Operations Research: Linear & Goal Programming (First Review)</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Operations Research: Linear & Goal Programming (Final System Optimization & Review)</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 # Beautiful Navigation Menu using streamlit-option-menu
@@ -179,7 +179,7 @@ elif nav == "4. Methodology Flow":
         style K fill:#22c55e,stroke:#15803d,stroke-width:2px,color:#ffffff
     ```
     """)
-    st.info("📌 **First Review Focus:** Steps A, B, C, and D are complete. The mathematical formulations (F, G) are designed. Implementations (H, I, J, K) are planned for the Final Review.")
+    st.success("📌 **Final Review System:** All steps (A through K) are fully implemented, verified, and operational with interactive LP and GP solvers.")
 
 # --- 5. Linear Programming (LP) ---
 elif nav == "5. Linear Programming":
@@ -415,8 +415,8 @@ elif nav == "7. Final Dashboard":
         **Why does GP also show 1-2 crops?** By default, GP also concentrates on the most efficient path to hit the production goal. The **Crop Diversity slider below** forces GP to allocate a minimum % of land to every selected crop, giving a realistic diverse allocation.
         """)
 
-    # ── STEP 5: Constraints ───────────────────────────────────────────────
-    st.markdown("### 📏 Step 5 — Set Resource Constraints")
+    # ── STEP 5: LP & GP Strategy Configuration ────────────────────────────
+    st.markdown("### 📏 Step 5 — Set Resource Constraints & LP Strategy")
     rc1, rc2, rc3 = st.columns(3)
     max_land = rc1.number_input("Available Land (ha)", min_value=100.0,
                                  value=float(max(rec_land, 100)), step=500.0,
@@ -427,6 +427,16 @@ elif nav == "7. Final Dashboard":
     max_pest = rc3.number_input("Max Pesticide (kg)", min_value=10.0,
                                  value=float(max(rec_pest, 10)), step=1000.0,
                                  help=f"Historical: {rec_pest:,.0f} kg")
+
+    st.markdown("#### ⚖️ Linear Programming Strategy")
+    lp_strategy = st.radio(
+        "Select Linear Programming Strategy:",
+        [
+            "🎯 Standard Unweighted LP (Maximize Total Production Tonnage — Z = Σ Yield_i · x_i)",
+            "💰 Weighted Efficiency LP (Maximize Weighted Yield per Chemical Unit — Z = Σ [Yield_i / Fert_i] · x_i)"
+        ],
+        index=0
+    )
 
     # ── STEP 6: GP Targets ────────────────────────────────────────────────
     st.markdown("### 🎯 Step 6 — Set Goal Programming Targets & Strategy")
@@ -456,6 +466,15 @@ elif nav == "7. Final Dashboard":
     use_multi_crop_goals = "Multi-Goal" in gp_strategy
     use_pulp_solver = "PuLP CBC" in gp_strategy
 
+    with st.expander("📖 Deep Comparison of the 3 Goal Programming Strategies & Solvers"):
+        st.markdown("""
+        | Strategy / Engine | Core Formulation & Method | Why Use It? | Output Characteristics |
+        |---|---|---|---|
+        | **🌾 Multi-Goal Cropping Pattern Balancing** | SciPy HiGHS Solver with $N$ Crop Land Share Goals ($x_i + d_{i,c}^- - d_{i,c}^+ = A_i^{\\text{target}}$) | Prevents monoculture; distributes land across **ALL crops** proportional to history. | Balanced, multi-crop realistic farm portfolio. |
+        | **🎯 Global Goals Only** | SciPy HiGHS Matrix Solver targeting aggregate Production, Fertilizer, & Pesticide | Focuses strictly on total yield & chemical caps without crop-level share goals. | May concentrate land into 1–2 highly efficient crops. |
+        | **⚡ Strictly PuLP CBC Solver** | COIN-OR CBC C++ Branch & Cut Solver via PuLP symbolic objects (`LpProblem`, `lpSum`) | Object-oriented symbolic execution with explicit deviation weights ($w_k \cdot d_k$). | Exact CBC solver pivot solutions with symbolic equation inspection. |
+        """)
+
     # Diversity slider
     st.markdown("#### 🌈 Additional Crop Diversity Floor (Minimum % per crop)")
     diversity_pct = st.slider(
@@ -484,8 +503,14 @@ elif nav == "7. Final Dashboard":
         # ── LINEAR PROGRAMMING ────────────────────────────────────────────
         min_alloc = (diversity_pct / 100.0) * max_land / n
 
-        # Maximize: Z = Σ yield_i · x_i  →  Minimize: -Z
-        lp_c      = -yields
+        if "Weighted" in lp_strategy:
+            # Weighted Yield per Fertilizer Unit Objective
+            lp_weights = yields / np.maximum(ferts, 1.0)
+            lp_c = -(yields * lp_weights)
+        else:
+            # Standard Unweighted Tonnage Objective
+            lp_c = -yields
+
         lp_A      = np.vstack([np.ones(n), ferts, pests])
         lp_b      = [max_land, max_fert, max_pest]
         lp_bounds = [(min_alloc, None)] * n
@@ -507,11 +532,9 @@ elif nav == "7. Final Dashboard":
                 import pulp
                 prob = pulp.LpProblem("PuLP_Goal_Programming", pulp.LpMinimize)
                 
-                # Decision variables (using positional args to support all PuLP versions)
                 lb_val = float(min_alloc) if min_alloc is not None else 0.0
                 x_vars = {c: pulp.LpVariable(f"x_{i}", lb_val, None, pulp.LpContinuous) for i, c in enumerate(selected_crops)}
                 
-                # Deviations
                 d1_minus = pulp.LpVariable("d1_minus", 0.0, None, pulp.LpContinuous)
                 d1_plus  = pulp.LpVariable("d1_plus", 0.0, None, pulp.LpContinuous)
                 d2_minus = pulp.LpVariable("d2_minus", 0.0, None, pulp.LpContinuous)
@@ -519,15 +542,11 @@ elif nav == "7. Final Dashboard":
                 d3_minus = pulp.LpVariable("d3_minus", 0.0, None, pulp.LpContinuous)
                 d3_plus  = pulp.LpVariable("d3_plus", 0.0, None, pulp.LpContinuous)
                 
-                # Total Land Constraint
                 prob += pulp.lpSum([x_vars[c] for c in selected_crops]) <= float(max_land), "Land_Limit"
-                
-                # Goal Constraints
                 prob += pulp.lpSum([float(params[c]['Yield']) * x_vars[c] for c in selected_crops]) + d1_minus - d1_plus == float(target_prod), "Prod_Goal"
                 prob += pulp.lpSum([float(params[c]['Fertilizer']) * x_vars[c] for c in selected_crops]) + d2_minus - d2_plus == float(target_fert), "Fert_Goal"
                 prob += pulp.lpSum([float(params[c]['Pesticide']) * x_vars[c] for c in selected_crops]) + d3_minus - d3_plus == float(target_pest), "Pest_Goal"
                 
-                # Objective: Minimize weighted sum of unwanted deviations
                 w1 = 10.0 / max(float(target_prod), 1.0)
                 w2 = 10.0 / max(float(target_fert), 1.0)
                 w3 = 10.0 / max(float(target_pest), 1.0)
@@ -551,7 +570,10 @@ elif nav == "7. Final Dashboard":
 
                 pulp_exec_success = True
             except Exception as ex:
-                st.warning(f"⚠️ PuLP execution notice: {ex}. Falling back to SciPy HiGHS Solver for 100% stability.")
+                import traceback
+                st.error("⚠️ PuLP CBC Solver Execution Traceback Details:")
+                st.code(f"Error Type: {type(ex).__name__}\nDetails: {str(ex)}\n\nTraceback:\n{traceback.format_exc()}")
+                st.info("ℹ️ Executing PuLP-equivalent formulation via SciPy HiGHS Solver for 100% stability.")
                 use_pulp_solver = False
 
         if not use_pulp_solver:
@@ -864,6 +886,55 @@ $$Z_{{GP}} = w_1 \cdot d_1^- + w_2 \cdot d_2^+ + w_3 \cdot d_3^+ + \sum w_{{i,cr
         })
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
+        # ── Advanced Chart Simulation Dropdown ──────────────────────────────
+        st.markdown("---")
+        st.markdown("### 🔬 Advanced Interactive Graph Simulation & Data Statistics")
+        sim_chart_choice = st.selectbox(
+            "Select an Advanced Simulation Chart / Statistic View:",
+            [
+                "🌾 Yield vs. Fertilizer Footprint Scatter (Efficiency Spectrum)",
+                "🧪 Fertilizer Efficiency Index (Yield / Fertilizer Ratio)",
+                "📊 Resource Consumption Spectrum (LP vs GP vs Limits)"
+            ],
+            key="tab7_sim_chart"
+        )
+
+        if "Yield vs. Fertilizer" in sim_chart_choice:
+            fig_sim = px.scatter(
+                x=[params[c]['Fertilizer'] for c in selected_crops],
+                y=[params[c]['Yield'] for c in selected_crops],
+                size=[lp_results[c] + 10 for c in selected_crops],
+                color=selected_crops,
+                labels={'x': 'Fertilizer Rate (kg/ha)', 'y': 'Yield (tons/ha)'},
+                title="Yield vs. Fertilizer Rate per Crop (Bubble Size = LP Land Allocated)",
+                hover_name=selected_crops
+            )
+            fig_sim.update_layout(height=400)
+            st.plotly_chart(fig_sim, use_container_width=True)
+
+        elif "Fertilizer Efficiency Index" in sim_chart_choice:
+            eff_ratios = [params[c]['Yield'] / max(params[c]['Fertilizer'], 0.1) for c in selected_crops]
+            fig_eff = go.Figure(go.Bar(
+                x=selected_crops, y=eff_ratios,
+                marker_color='#10b981',
+                text=[f"{r:.4f} t/kg" for r in eff_ratios],
+                textposition='outside'
+            ))
+            fig_eff.update_layout(title="Fertilizer Output Efficiency Index (Tons Yield per kg Fertilizer)",
+                                  yaxis_title="Efficiency Ratio (tons/kg)", height=400)
+            st.plotly_chart(fig_eff, use_container_width=True)
+
+        elif "Resource Consumption" in sim_chart_choice:
+            fig_spectrum = go.Figure()
+            fig_spectrum.add_trace(go.Bar(name='Available Capacity', x=['Land (ha)', 'Fertilizer (kg)', 'Pesticide (kg)'],
+                                          y=[max_land, max_fert, max_pest], marker_color='#94a3b8'))
+            fig_spectrum.add_trace(go.Bar(name='LP Consumption', x=['Land (ha)', 'Fertilizer (kg)', 'Pesticide (kg)'],
+                                          y=[lp_land_used, lp_fert_used, lp_pest_used], marker_color='#3b82f6'))
+            fig_spectrum.add_trace(go.Bar(name='GP Consumption', x=['Land (ha)', 'Fertilizer (kg)', 'Pesticide (kg)'],
+                                          y=[gp_land_used, gp_fert_used, gp_pest_used], marker_color='#f97316'))
+            fig_spectrum.update_layout(barmode='group', title="Resource Capacity vs Actual Consumption Spectrum", height=400)
+            st.plotly_chart(fig_spectrum, use_container_width=True)
+
         # ── Final Interpretation & Novelty ──────────────────────────────────
         st.markdown("### 📝 Analysis & Interpretation")
         best_lp_crop = max(selected_crops, key=lambda c: lp_results[c])
@@ -882,6 +953,19 @@ as possible to all goals simultaneously. Land is distributed across crops to mai
 **Key Insight for Final Review:** LP gives you the theoretical maximum. GP gives you the practical optimum that
 a real farmer or policy maker would actually implement — balancing yield, cost, and sustainability.
         """)
+
+        st.markdown("""
+        <div class="highlight-box">
+        <h4>💡 Why Goal Programming Matters — The Value Proposition</h4>
+        <p><b>Question:</b> <i>If target variables in GP are set to historical averages, won't GP produce results nearly identical to historical land shares? What's the value of GP then?</i></p>
+        <p><b>Answer & Core Value:</b></p>
+        <ul>
+            <li><b>Static History vs. Dynamic Policy:</b> Historical data reflects what happened under <i>past conditions</i>. But if a state faces a 20% fertilizer quota reduction, drought water limits, or new production quotas, historical allocation violates the new constraints!</li>
+            <li><b>Mathematical Rebalancing:</b> GP recalculates land distribution dynamically to hit the new targets with minimal deviation penalties, whereas copying past shares would result in infeasibility or severe chemical overshoots.</li>
+            <li><b>Trade-off Resolution:</b> GP allows decision-makers to prioritize conflicting goals (e.g. prioritizing chemical reduction over raw tonnage, or vice versa) via penalty weights ($w_k$).</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown("### 💎 Research Novelty & Target Stakeholders")
@@ -1085,6 +1169,53 @@ elif nav == "8. Crop Advisory & Recommendation":
             'Yield (tons/ha)': '{:.2f}',
             'Est. GP Prod (tons)': '{:,.1f}'
         }), use_container_width=True, hide_index=True)
+
+    # ── Regional Advanced Simulation Dropdown for Tab 8 ──────────────────
+    st.markdown("---")
+    st.markdown("### 🔬 Regional Historical Analytics & Interactive Chart Simulations")
+    sim_chart_adv = st.selectbox(
+        "Select Regional Simulation View:",
+        [
+            "🌾 Land Share (%) vs Production Contributed Share (%)",
+            "🧪 Regional Fertilizer Intensity per Crop (kg/ha)",
+            "📈 Expected Crop Production Contribution Breakdown (tons)"
+        ],
+        key="tab8_sim_chart"
+    )
+
+    if "Land Share (%) vs Production" in sim_chart_adv:
+        land_shares = [(gp_adv_alloc[i] / adv_land * 100) for i in range(n_adv)]
+        gp_prods = [adv_yields[i] * gp_adv_alloc[i] for i in range(n_adv)]
+        tot_gp_prod = sum(gp_prods)
+        prod_shares = [(gp_prods[i] / max(tot_gp_prod, 1.0) * 100) for i in range(n_adv)]
+
+        fig_comp = go.Figure()
+        fig_comp.add_trace(go.Bar(name='Land Share (%)', x=adv_crops, y=land_shares, marker_color='#3b82f6'))
+        fig_comp.add_trace(go.Bar(name='Production Share (%)', x=adv_crops, y=prod_shares, marker_color='#22c55e'))
+        fig_comp.update_layout(barmode='group', title=f"Land Allocated (%) vs Production Contributed (%) — {adv_state}", height=400)
+        st.plotly_chart(fig_comp, use_container_width=True)
+
+    elif "Fertilizer Intensity" in sim_chart_adv:
+        fig_fert_int = go.Figure(go.Bar(
+            x=adv_crops, y=adv_ferts,
+            marker_color='#f59e0b',
+            text=[f"{f:.1f} kg/ha" for f in adv_ferts],
+            textposition='outside'
+        ))
+        fig_fert_int.update_layout(title=f"Regional Fertilizer Rate per Hectare — {adv_state} ({adv_season})",
+                                   yaxis_title="Fertilizer Rate (kg/ha)", height=400)
+        st.plotly_chart(fig_fert_int, use_container_width=True)
+
+    elif "Expected Crop Production" in sim_chart_adv:
+        gp_prods = [adv_yields[i] * gp_adv_alloc[i] for i in range(n_adv)]
+        fig_prod_b = go.Figure(go.Bar(
+            x=adv_crops, y=gp_prods,
+            marker_color='#6366f1',
+            text=[f"{p:,.0f} t" for p in gp_prods],
+            textposition='outside'
+        ))
+        fig_prod_b.update_layout(title=f"Expected Production Contribution per Crop (tons) — {adv_state}", height=400)
+        st.plotly_chart(fig_prod_b, use_container_width=True)
 
 
 # --- 9. Team Contribution ---
