@@ -446,23 +446,27 @@ elif nav == "7. Final Dashboard":
     gp_strategy = st.radio(
         "Select Goal Weighting Strategy & Solver Engine:",
         [
-            "🌾 Multi-Goal Cropping Pattern Balancing (Recommended — SciPy HiGHS Engine with Crop Target Shares)",
-            "🎯 Global Goals Only (SciPy HiGHS Engine — Production & Chemical Targets)",
-            "⚡ Strictly PuLP CBC Solver GP (PuLP Object-Oriented Engine — Preemptive & Weighted Deviations)"
+            "🌾 Multi-Goal Cropping Pattern Balancing (Recommended — Primary Multi-Crop Solution with Crop Share Goals)",
+            "🎯 Global Goals Only (Baseline Exploration — Aggregate Production & Chemical Goals Only)",
+            "⚡ Strictly PuLP CBC Solver GP (Baseline Exploration — Symbolic CBC Engine with Aggregate Goals)"
         ],
         index=0,
-        help="Multi-Goal mode adds crop-level target share goals. PuLP mode strictly executes the COIN-OR CBC Solver engine!"
+        help="Multi-Goal mode adds crop-level target share goals ($x_i \\approx A_i^{\\text{target}}$). Baseline options optimize aggregate goals only!"
     )
     use_multi_crop_goals = "Multi-Goal" in gp_strategy
     use_pulp_solver = "PuLP CBC" in gp_strategy
 
-    with st.expander("📖 Deep Comparison of the 3 Goal Programming Strategies & Solvers"):
+    with st.expander("📖 Deep Comparison of the 3 Goal Programming Strategies & Solvers", expanded=True):
         st.markdown("""
         | Strategy / Engine | Core Formulation & Method | Why Use It? | Output Characteristics |
         |---|---|---|---|
-        | **🌾 Multi-Goal Cropping Pattern Balancing** | SciPy HiGHS Solver with $N$ Crop Land Share Goals ($x_i + d_{i,c}^- - d_{i,c}^+ = A_i^{\\text{target}}$) | Prevents monoculture; distributes land across **ALL crops** proportional to history. | Balanced, multi-crop realistic farm portfolio. |
-        | **🎯 Global Goals Only** | SciPy HiGHS Matrix Solver targeting aggregate Production, Fertilizer, & Pesticide | Focuses strictly on total yield & chemical caps without crop-level share goals. | May concentrate land into 1–2 highly efficient crops. |
-        | **⚡ Strictly PuLP CBC Solver** | COIN-OR CBC C++ Branch & Cut Solver via PuLP symbolic objects (`LpProblem`, `lpSum`) | Object-oriented symbolic execution with explicit deviation weights ($w_k \cdot d_k$). | Exact CBC solver pivot solutions with symbolic equation inspection. |
+        | **🌾 Multi-Goal Cropping Pattern Balancing** *(Recommended)* | SciPy HiGHS Solver with $N$ Crop Land Share Goals ($x_i + d_{i,c}^- - d_{i,c}^+ = A_i^{\\text{target}}$) | **Resolves Monoculture Trap:** Embeds individual crop land share targets to ensure land is distributed across **ALL selected crops**. | **Balanced, multi-crop realistic farm portfolio.** |
+        | **🎯 Global Goals Only** *(Baseline Exploration)* | SciPy HiGHS Matrix Solver targeting aggregate Production, Fertilizer, & Pesticide | Baseline test of global aggregate goals without crop-level share targets. | **Monoculture Concentration:** Concentrates land into 1–2 highest-yielding crops (leaves remaining crops at 0). |
+        | **⚡ Strictly PuLP CBC Solver** *(Baseline Exploration)* | COIN-OR CBC C++ Branch & Cut Solver via PuLP symbolic objects (`LpProblem`, `lpSum`) | Baseline symbolic execution targeting aggregate goals via COIN-OR CBC pivot algorithms. | **Monoculture Concentration:** Solves aggregate production/chemical goals; allocates land only to top-performing crops. |
+
+        > 💡 **Why do Baseline Choices (Global Goals & PuLP CBC) concentrate land into 1–2 crops?**  
+        > When a Goal Programming model *only* targets aggregate state production, total fertilizer, and total pesticide, the mathematical solver naturally picks the single or double most resource-efficient crop to hit the production quota with minimal chemical usage. Because there are no individual crop-level target share equations ($x_i = A_i^{\text{target}}$), it sets secondary crops to 0 (behaving similarly to Linear Programming).  
+        > **Multi-Goal Cropping Pattern Balancing** fixes this exact mathematical limitation by introducing crop-specific land share goals, forcing a multi-crop distribution!
         """)
 
     # Diversity slider
@@ -739,8 +743,8 @@ $$Z_{{LP}} = \sum (Yield_i \cdot x_i) = {lp_obj_terms}$$
 """ + "\n".join([f"| x_{i+1} | **{c}** | {lp_results[c]:,.2f} ha | {(lp_results[c]/max(lp_land_used,1)*100):.1f}% |" for i, c in enumerate(selected_crops)]) + f"""
 
 💡 **Linear Programming vs Goal Programming Formulation:**
-- **Linear Programming:** Focuses on single-objective maximization ($Z_{LP} = \sum Yield_i \cdot x_i$) under hard upper bound constraints (Land, Fertilizer, Pesticide).
-- **Goal Programming:** Focuses on multi-objective target balancing by minimizing weighted penalty deviations ($Z_{GP} = \sum w_k \cdot d_k$) from target goals.
+- **Linear Programming:** Focuses on single-objective maximization ($Z_{{LP}} = \sum Yield_i \cdot x_i$) under hard upper bound constraints (Land, Fertilizer, Pesticide).
+- **Goal Programming:** Focuses on multi-objective target balancing by minimizing weighted penalty deviations ($Z_{{GP}} = \sum w_k \cdot d_k$) from target goals.
             """)
 
         with st.expander("🎯 GP Objective Function, Goal Constraints & Variable Values — Expanded", expanded=True):
