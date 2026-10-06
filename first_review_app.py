@@ -875,55 +875,6 @@ $$Z_{{GP}} = w_1 \cdot d_1^- + w_2 \cdot d_2^+ + w_3 \cdot d_3^+ + \sum w_{{i,cr
         })
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
-        # ── Advanced Chart Simulation Dropdown ──────────────────────────────
-        st.markdown("---")
-        st.markdown("### 🔬 Advanced Interactive Graph Simulation & Data Statistics")
-        sim_chart_choice = st.selectbox(
-            "Select an Advanced Simulation Chart / Statistic View:",
-            [
-                "🌾 Yield vs. Fertilizer Footprint Scatter (Efficiency Spectrum)",
-                "🧪 Fertilizer Efficiency Index (Yield / Fertilizer Ratio)",
-                "📊 Resource Consumption Spectrum (LP vs GP vs Limits)"
-            ],
-            key="tab7_sim_chart"
-        )
-
-        if "Yield vs. Fertilizer" in sim_chart_choice:
-            fig_sim = px.scatter(
-                x=[params[c]['Fertilizer'] for c in selected_crops],
-                y=[params[c]['Yield'] for c in selected_crops],
-                size=[lp_results[c] + 10 for c in selected_crops],
-                color=selected_crops,
-                labels={'x': 'Fertilizer Rate (kg/ha)', 'y': 'Yield (tons/ha)'},
-                title="Yield vs. Fertilizer Rate per Crop (Bubble Size = LP Land Allocated)",
-                hover_name=selected_crops
-            )
-            fig_sim.update_layout(height=400)
-            st.plotly_chart(fig_sim, use_container_width=True)
-
-        elif "Fertilizer Efficiency Index" in sim_chart_choice:
-            eff_ratios = [params[c]['Yield'] / max(params[c]['Fertilizer'], 0.1) for c in selected_crops]
-            fig_eff = go.Figure(go.Bar(
-                x=selected_crops, y=eff_ratios,
-                marker_color='#10b981',
-                text=[f"{r:.4f} t/kg" for r in eff_ratios],
-                textposition='outside'
-            ))
-            fig_eff.update_layout(title="Fertilizer Output Efficiency Index (Tons Yield per kg Fertilizer)",
-                                  yaxis_title="Efficiency Ratio (tons/kg)", height=400)
-            st.plotly_chart(fig_eff, use_container_width=True)
-
-        elif "Resource Consumption" in sim_chart_choice:
-            fig_spectrum = go.Figure()
-            fig_spectrum.add_trace(go.Bar(name='Available Capacity', x=['Land (ha)', 'Fertilizer (kg)', 'Pesticide (kg)'],
-                                          y=[max_land, max_fert, max_pest], marker_color='#94a3b8'))
-            fig_spectrum.add_trace(go.Bar(name='LP Consumption', x=['Land (ha)', 'Fertilizer (kg)', 'Pesticide (kg)'],
-                                          y=[lp_land_used, lp_fert_used, lp_pest_used], marker_color='#3b82f6'))
-            fig_spectrum.add_trace(go.Bar(name='GP Consumption', x=['Land (ha)', 'Fertilizer (kg)', 'Pesticide (kg)'],
-                                          y=[gp_land_used, gp_fert_used, gp_pest_used], marker_color='#f97316'))
-            fig_spectrum.update_layout(barmode='group', title="Resource Capacity vs Actual Consumption Spectrum", height=400)
-            st.plotly_chart(fig_spectrum, use_container_width=True)
-
         # ── Final Interpretation & Novelty ──────────────────────────────────
         st.markdown("### 📝 Analysis & Interpretation")
         best_lp_crop = max(selected_crops, key=lambda c: lp_results[c])
