@@ -314,54 +314,68 @@ elif nav == "7. Final Dashboard":
             target_pest = g3.number_input("Target Pesticide Limit (kg) [Goal 3]", min_value=10.0, value=15000.0, step=100.0)
         
             if st.button("🚀 Run Operations Research Solvers", use_container_width=True, type="primary"):
-                try:
-                    from pulp import LpProblem, LpVariable, LpMaximize, LpMinimize, lpSum, LpStatus
-                except ImportError:
-                    st.error("⚠️ The optimization library (PuLP) is not installed yet. Please wait 1-2 minutes for the server to finish installing packages, then refresh the page.")
-                    st.stop()
-                # Sanitize crop names for PuLP variables
-                def clean_name(name):
-                    return re.sub(r'[^a-zA-Z0-9]', '_', str(name))
-                    
-                # LP Model
-                lp_model = LpProblem("Maximize_Production", LpMaximize)
-                lp_vars = {c: LpVariable(f"LP_{clean_name(c)}", lowBound=0, cat='Continuous') for c in selected_crops}
+                from scipy.optimize import linprog
                 
-                lp_model += lpSum([params[c]['Yield'] * lp_vars[c] for c in selected_crops]), "Total_Production"
-                lp_model += lpSum([lp_vars[c] for c in selected_crops]) <= max_land, "Land_Constraint"
-                lp_model += lpSum([params[c]['Fertilizer'] * lp_vars[c] for c in selected_crops]) <= max_fert, "Fertilizer_Constraint"
-                lp_model += lpSum([params[c]['Pesticide'] * lp_vars[c] for c in selected_crops]) <= max_pest, "Pesticide_Constraint"
+                n = len(selected_crops)
+                yields = np.array([params[c]['Yield']      for c in selected_crops])
+                ferts  = np.array([params[c]['Fertilizer'] for c in selected_crops])
+                pests  = np.array([params[c]['Pesticide']  for c in selected_crops])
                 
-                lp_model.solve()
-                lp_status_text = LpStatus[lp_model.status]
+                # ── LINEAR PROGRAMMING ────────────────────────────────────────────
+                # Maximise Σ yield_i * x_i  →  Minimise negative
+                lp_c = -yields
+                lp_A = np.vstack([np.ones(n), ferts, pests])
+                lp_b = [max_land, max_fert, max_pest]
+                lp_bounds = [(0, None)] * n
                 
-                lp_results = {c: lp_vars[c].varValue if lp_vars[c].varValue is not None else 0.0 for c in selected_crops}
-                lp_total_prod = sum([params[c]['Yield'] * lp_results[c] for c in selected_crops])
+                lp_res = linprog(lp_c, A_ub=lp_A, b_ub=lp_b, bounds=lp_bounds, method='highs')
                 
-                # GP Model
-                gp_model = LpProblem("Minimize_Deviations", LpMinimize)
-                gp_vars = {c: LpVariable(f"GP_{clean_name(c)}", lowBound=0, cat='Continuous') for c in selected_crops}
+                if lp_res.success:
+                    lp_alloc = lp_res.x
+                    lp_status_text = "Optimal"
+                else:
+                    lp_alloc = np.zeros(n)
+                    lp_status_text = "Infeasible / No Solution"
                 
-                d_prod_minus = LpVariable("d_prod_minus", lowBound=0)
-                d_prod_plus = LpVariable("d_prod_plus", lowBound=0)
-                d_fert_minus = LpVariable("d_fert_minus", lowBound=0)
-                d_fert_plus = LpVariable("d_fert_plus", lowBound=0)
-                d_pest_minus = LpVariable("d_pest_minus", lowBound=0)
-                d_pest_plus = LpVariable("d_pest_plus", lowBound=0)
+                lp_results = {c: float(lp_alloc[i]) for i, c in enumerate(selected_crops)}
+                lp_total_prod = float(yields @ lp_alloc)
                 
-                gp_model += lpSum([gp_vars[c] for c in selected_crops]) <= max_land, "Land_Constraint"
-                gp_model += lpSum([params[c]['Yield'] * gp_vars[c] for c in selected_crops]) + d_prod_minus - d_prod_plus == target_prod, "Production_Goal"
-                gp_model += lpSum([params[c]['Fertilizer'] * gp_vars[c] for c in selected_crops]) + d_fert_minus - d_fert_plus == target_fert, "Fertilizer_Goal"
-                gp_model += lpSum([params[c]['Pesticide'] * gp_vars[c] for c in selected_crops]) + d_pest_minus - d_pest_plus == target_pest, "Pesticide_Goal"
+                # ── GOAL PROGRAMMING ──────────────────────────────────────────────
+                # Variables: x_0..x_{n-1}, d1-(n), d1+(n+1), d2-(n+2), d2+(n+3), d3-(n+4), d3+(n+5)
+                # Minimise: d1- + d2+ + d3+
+                nv = n + 6
+                gp_c = np.zeros(nv)
+                gp_c[n]   = 1   # d1- (miss production target)
+                gp_c[n+3] = 1   # d2+ (exceed fertilizer target)
+                gp_c[n+5] = 1   # d3+ (exceed pesticide target)
                 
-                gp_model += d_prod_minus + d_fert_plus + d_pest_plus, "Total_Deviation"
+                # Inequality: Σ x_i <= max_land
+                gp_A_ub = np.zeros((1, nv)); gp_A_ub[0, :n] = 1
+                gp_b_ub = [max_land]
                 
-                gp_model.solve()
-                gp_status_text = LpStatus[gp_model.status]
+                # Equality: goal constraints
+                gp_A_eq = np.zeros((3, nv))
+                gp_A_eq[0, :n] = yields; gp_A_eq[0, n]   =  1; gp_A_eq[0, n+1] = -1
+                gp_A_eq[1, :n] = ferts;  gp_A_eq[1, n+2] =  1; gp_A_eq[1, n+3] = -1
+                gp_A_eq[2, :n] = pests;  gp_A_eq[2, n+4] =  1; gp_A_eq[2, n+5] = -1
+                gp_b_eq = [target_prod, target_fert, target_pest]
+                gp_bounds = [(0, None)] * nv
                 
-                gp_results = {c: gp_vars[c].varValue if gp_vars[c].varValue is not None else 0.0 for c in selected_crops}
-                gp_total_prod = sum([params[c]['Yield'] * gp_results[c] for c in selected_crops])
+                gp_res = linprog(gp_c, A_ub=gp_A_ub, b_ub=gp_b_ub,
+                                 A_eq=gp_A_eq, b_eq=gp_b_eq,
+                                 bounds=gp_bounds, method='highs')
                 
+                if gp_res.success:
+                    gp_alloc = gp_res.x[:n]
+                    gp_status_text = "Optimal"
+                else:
+                    gp_alloc = np.zeros(n)
+                    gp_status_text = "Infeasible / No Solution"
+                
+                gp_results = {c: float(gp_alloc[i]) for i, c in enumerate(selected_crops)}
+                gp_total_prod = float(yields @ gp_alloc)
+                
+                # ── RESULTS DISPLAY ───────────────────────────────────────────────
                 st.markdown("---")
                 st.markdown("### 🏆 Optimization Results")
                 
@@ -369,29 +383,35 @@ elif nav == "7. Final Dashboard":
                 with out1:
                     st.success(f"**LP Status:** {lp_status_text} | Max Production: **{lp_total_prod:,.2f} tons**")
                     fig = go.Figure(data=[
-                        go.Bar(name='LP Allocation (ha)', x=selected_crops, y=[lp_results[c] for c in selected_crops], marker_color='#1f77b4'),
-                        go.Bar(name='GP Allocation (ha)', x=selected_crops, y=[gp_results[c] for c in selected_crops], marker_color='#ff7f0e')
+                        go.Bar(name='LP Allocation (ha)', x=selected_crops,
+                               y=[lp_results[c] for c in selected_crops], marker_color='#1f77b4'),
+                        go.Bar(name='GP Allocation (ha)', x=selected_crops,
+                               y=[gp_results[c] for c in selected_crops], marker_color='#ff7f0e')
                     ])
-                    fig.update_layout(barmode='group', title="Optimal Land Allocation (Hectares)")
+                    fig.update_layout(barmode='group', title="Optimal Land Allocation (Hectares)",
+                                      xaxis_tickangle=-30)
                     st.plotly_chart(fig, use_container_width=True)
                     
                 with out2:
                     st.info(f"**GP Status:** {gp_status_text} | Balanced Production: **{gp_total_prod:,.2f} tons**")
-                    lp_land_used = sum([lp_results[c] for c in selected_crops])
-                    gp_land_used = sum([gp_results[c] for c in selected_crops])
-                    lp_fert_used = sum([params[c]['Fertilizer'] * lp_results[c] for c in selected_crops])
-                    gp_fert_used = sum([params[c]['Fertilizer'] * gp_results[c] for c in selected_crops])
+                    lp_land_used = sum(lp_results.values())
+                    gp_land_used = sum(gp_results.values())
+                    lp_fert_used = sum(params[c]['Fertilizer'] * lp_results[c] for c in selected_crops)
+                    gp_fert_used = sum(params[c]['Fertilizer'] * gp_results[c] for c in selected_crops)
                     
                     fig2 = go.Figure(data=[
-                        go.Bar(name='LP Used', x=['Land', 'Fertilizer'], y=[lp_land_used / max_land * 100, lp_fert_used / max_fert * 100]),
-                        go.Bar(name='GP Used', x=['Land', 'Fertilizer'], y=[gp_land_used / max_land * 100, gp_fert_used / max_fert * 100])
+                        go.Bar(name='LP Used', x=['Land', 'Fertilizer'],
+                               y=[lp_land_used / max_land * 100, lp_fert_used / max_fert * 100]),
+                        go.Bar(name='GP Used', x=['Land', 'Fertilizer'],
+                               y=[gp_land_used / max_land * 100, gp_fert_used / max_fert * 100])
                     ])
-                    fig2.update_layout(barmode='group', title="Resource Utilization (% of Max Limit)")
+                    fig2.update_layout(barmode='group', title="Resource Utilization (% of Max Limit)",
+                                       yaxis=dict(range=[0, 110]))
                     st.plotly_chart(fig2, use_container_width=True)
                     
                 st.markdown("### 📝 Analysis & Interpretation")
-                st.write("**Linear Programming (LP):** Maximized production by allocating land strictly to the most efficient crop, up to the hard constraints. This often results in a less diverse crop mix or maximum resource drain.")
-                st.write(f"**Goal Programming (GP):** Balanced the allocation to hit the Target Production of {target_prod} tons while trying not to exceed {target_fert} kg of fertilizer. This provides a more realistic, environmentally conscious farming plan.")
+                st.write("**Linear Programming (LP):** Maximized production by allocating land to the highest-yield crops. Often concentrates resources on 1-2 crops for pure maximum output.")
+                st.write(f"**Goal Programming (GP):** Balanced allocation to hit the Production Target of {target_prod:,.0f} tons while staying within fertilizer limit of {target_fert:,.0f} kg. Gives a more sustainable, multi-objective farming plan.")
 
 # --- 8. Team Contribution ---
 
