@@ -337,26 +337,10 @@ elif nav == "7. Final Dashboard":
 
     # ── Parameter Table + Coefficient Chart ───────────────────────────────
     with st.expander("📊 Step 3 — View Crop Parameters (Derived from Dataset)", expanded=True):
-        if dataset_has_uniform_fert:
-            st.warning("""
-⚠️ **Dataset Limitation Detected:** The Fertilizer (kg/ha) and Pesticide (kg/ha) values are **identical across all crops**.
-This is because this dataset stores **state-level total fertilizer** distributed proportionally by crop area —
-so `Fertilizer ÷ Area = State_Total_Fertilizer ÷ State_Total_Area` = a constant for all crops in the same state-year.
-
-**Impact on optimization:** The fertilizer constraint effectively becomes a second land constraint (just scaled).
-The real differentiator between crops is **Yield (tons/ha)** — which varies significantly.
-The historical Fertilizer and Pesticide **totals** below show the actual dataset values per crop (they differ because areas differ).
-            """)
-        else:
-            st.markdown("""
-**How parameters are computed:** For the selected **State × Season × Year**, `Yield` (tons/ha) is read directly.
-`Fertilizer/ha` and `Pesticide/ha` are computed as `Total Fertilizer ÷ Area`. These become the **coefficients** in our LP and GP equations.
-            """)
+        st.info(f"ℹ️ **State Baseline Chemical Rates ({target_state} — {target_season} {target_year}):** Calculated Fertilizer Rate = **{state_avg_fert_ha:.2f} kg/ha** | Pesticide Rate = **{state_avg_pest_ha:.2f} kg/ha** (constant per hectare across crops for this state-year). Crop Yields (tons/ha) and Total Historical Resource Footprints vary distinctly.")
 
         param_df = pd.DataFrame({
             'Yield (tons/ha)':         {c: params[c]['Yield']      for c in selected_crops},
-            'Fert/ha (kg)':            {c: params[c]['Fertilizer'] for c in selected_crops},
-            'Pest/ha (kg)':            {c: params[c]['Pesticide']  for c in selected_crops},
             'Hist. Area (ha)':         {c: params[c]['Area_hist']  for c in selected_crops},
             'Hist. Fert Total (kg)':   {c: params[c]['Fert_hist']  for c in selected_crops},
             'Hist. Pest Total (kg)':   {c: params[c]['Pest_hist']  for c in selected_crops},
@@ -498,11 +482,13 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
             target_crop_areas = np.full(n, max_land / n)
 
         # ── LINEAR PROGRAMMING ────────────────────────────────────────────
+        min_alloc = (diversity_pct / 100.0) * max_land / n
+
         # Maximize: Z = Σ yield_i · x_i  →  Minimize: -Z
         lp_c      = -yields
         lp_A      = np.vstack([np.ones(n), ferts, pests])
         lp_b      = [max_land, max_fert, max_pest]
-        lp_bounds = [(0, None)] * n
+        lp_bounds = [(min_alloc, None)] * n
 
         lp_res = linprog(lp_c, A_ub=lp_A, b_ub=lp_b, bounds=lp_bounds, method='highs')
 
@@ -515,25 +501,23 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
         lp_land_used   = float(lp_alloc.sum())
 
         # ── GOAL PROGRAMMING ──────────────────────────────────────────────
-        min_alloc = (diversity_pct / 100.0) * max_land / n
-
         if use_pulp_solver:
             pulp_exec_success = False
             try:
                 import pulp
                 prob = pulp.LpProblem("PuLP_Goal_Programming", pulp.LpMinimize)
                 
-                # Decision variables (cast numpy float to Python float for Python 3.14 compatibility)
+                # Decision variables (using positional args to support all PuLP versions)
                 lb_val = float(min_alloc) if min_alloc is not None else 0.0
-                x_vars = {c: pulp.LpVariable(f"x_{i}", lowBound=lb_val, cat='Continuous') for i, c in enumerate(selected_crops)}
+                x_vars = {c: pulp.LpVariable(f"x_{i}", lb_val, None, pulp.LpContinuous) for i, c in enumerate(selected_crops)}
                 
                 # Deviations
-                d1_minus = pulp.LpVariable("d1_minus", lowBound=0.0)
-                d1_plus  = pulp.LpVariable("d1_plus", lowBound=0.0)
-                d2_minus = pulp.LpVariable("d2_minus", lowBound=0.0)
-                d2_plus  = pulp.LpVariable("d2_plus", lowBound=0.0)
-                d3_minus = pulp.LpVariable("d3_minus", lowBound=0.0)
-                d3_plus  = pulp.LpVariable("d3_plus", lowBound=0.0)
+                d1_minus = pulp.LpVariable("d1_minus", 0.0, None, pulp.LpContinuous)
+                d1_plus  = pulp.LpVariable("d1_plus", 0.0, None, pulp.LpContinuous)
+                d2_minus = pulp.LpVariable("d2_minus", 0.0, None, pulp.LpContinuous)
+                d2_plus  = pulp.LpVariable("d2_plus", 0.0, None, pulp.LpContinuous)
+                d3_minus = pulp.LpVariable("d3_minus", 0.0, None, pulp.LpContinuous)
+                d3_plus  = pulp.LpVariable("d3_plus", 0.0, None, pulp.LpContinuous)
                 
                 # Total Land Constraint
                 prob += pulp.lpSum([x_vars[c] for c in selected_crops]) <= float(max_land), "Land_Limit"
@@ -730,51 +714,57 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
         # ── Mathematical Model Breakdown ───────────────────────────────────
         st.markdown("### 🔢 What the Math Looks Like (With Your Numbers)")
 
-        with st.expander("📐 LP Objective Function & Constraints — Expanded", expanded=True):
+        with st.expander("📐 LP Objective Function, Constraints & Variable Values — Expanded", expanded=True):
             lp_obj_terms = " + ".join([f"({params[c]['Yield']:.2f} × x_{i+1}[{c}])" for i, c in enumerate(selected_crops)])
             st.markdown(f"""
 **Objective Function (Maximize Production):**
-$$Z_{{LP}} = {lp_obj_terms}$$
+$$Z_{{LP}} = \sum (Yield_i \cdot x_i) = {lp_obj_terms}$$
 
-**Subject to:**
-- **Land:** {' + '.join([f'x_{i+1}' for i in range(n)])} ≤ **{max_land:,.0f} ha**
-- **Fertilizer:** {' + '.join([f'({params[c]["Fertilizer"]:.1f} × x_{i+1})' for i,c in enumerate(selected_crops)])} ≤ **{max_fert:,.0f} kg**
-- **Pesticide:** {' + '.join([f'({params[c]["Pesticide"]:.2f} × x_{i+1})' for i,c in enumerate(selected_crops)])} ≤ **{max_pest:,.0f} kg**
-- **Non-negativity:** x₁, x₂, ... ≥ 0
+**Subject to Constraints:**
+- **Land Limit:** {' + '.join([f'x_{i+1}' for i in range(n)])} ≤ **{max_land:,.0f} ha**
+- **Fertilizer Limit:** {' + '.join([f'({params[c]["Fertilizer"]:.1f} × x_{i+1})' for i,c in enumerate(selected_crops)])} ≤ **{max_fert:,.0f} kg**
+- **Pesticide Limit:** {' + '.join([f'({params[c]["Pesticide"]:.2f} × x_{i+1})' for i,c in enumerate(selected_crops)])} ≤ **{max_pest:,.0f} kg**
+- **Minimum Diversity Floor:** x₁, x₂, ... ≥ **{min_alloc:,.1f} ha** (Minimum {diversity_pct}% per crop)
 
-**Why LP picks {sum(1 for v in lp_results.values() if v > 1)} crop(s):**
-The crop with the highest yield-per-fertilizer-unit wins all the available budget.
-{'Crop: ' + max(selected_crops, key=lambda c: params[c]['Yield']/max(params[c]['Fertilizer'],0.01))} has the best ratio at
-{max(params[c]['Yield']/max(params[c]['Fertilizer'],0.01) for c in selected_crops):.4f} tons/kg-fertilizer.
-LP exploits this and puts maximum land there until a constraint binds.
+**Exact Decision Variable Solved Values ($x_i$):**
+| Variable | Crop Name | Solved Allocation (ha) | Land Share (%) |
+|---|---|---|---|
+""" + "\n".join([f"| x_{i+1} | **{c}** | {lp_results[c]:,.2f} ha | {(lp_results[c]/max(lp_land_used,1)*100):.1f}% |" for i, c in enumerate(selected_crops)]) + f"""
+
+💡 **Weighted LP vs Goal Programming Weights:**
+- **Can we use weights in Linear Programming?** YES! In Weighted Linear Programming, the objective is $Z = \sum (w_i \cdot Yield_i \cdot x_i)$ where $w_i = \text{{Market Price}}_i$ or $\text{{Priority}}_i$.
+- **Key Difference:** In LP, weights directly multiply *production decision variables ($x_i$)* to maximize total revenue or nutritional value. In Goal Programming, weights multiply *deviation variables ($d_k^-, d_k^+$)* to penalize missing target goals!
             """)
 
-        with st.expander("🎯 GP Objective Function & Goal Constraints — Expanded", expanded=True):
-            gp_obj = "d₁⁻ + d₂⁺ + d₃⁺"
+        with st.expander("🎯 GP Objective Function, Goal Constraints & Variable Values — Expanded", expanded=True):
             st.markdown(f"""
 **Objective Function (Minimize Deviations):**
-$$Z_{{GP}} = d_1^- + d_2^+ + d_3^+$$
+$$Z_{{GP}} = w_1 \cdot d_1^- + w_2 \cdot d_2^+ + w_3 \cdot d_3^+ + \sum w_{{i,crop}} (d_{{i,crop}}^- + d_{{i,crop}}^+)$$
 
-- **d₁⁻** = amount we **fall short** of production target (we don't want this)
-- **d₂⁺** = amount we **exceed** the fertilizer target (we don't want this)
-- **d₃⁺** = amount we **exceed** the pesticide target (we don't want this)
+- **d₁⁻** = amount we **fall short** of production target (penalized)
+- **d₂⁺** = amount we **exceed** fertilizer target (penalized)
+- **d₃⁺** = amount we **exceed** pesticide target (penalized)
 
-**Goal Constraints:**
-- **Goal 1 (Production):** Σ(yield × x) + d₁⁻ − d₁⁺ = **{target_prod:,.0f} tons**
-- **Goal 2 (Fertilizer):** Σ(fert × x) + d₂⁻ − d₂⁺ = **{target_fert:,.0f} kg**
-- **Goal 3 (Pesticide):** Σ(pest × x) + d₃⁻ − d₃⁺ = **{target_pest:,.0f} kg**
+**Goal Constraints Equations (With Substituted Numbers):**
+- **Goal 1 (Production):** {' + '.join([f'({params[c]["Yield"]:.2f} × x_{i+1})' for i,c in enumerate(selected_crops)])} + d₁⁻ − d₁⁺ = **{target_prod:,.0f} tons**
+- **Goal 2 (Fertilizer):** {' + '.join([f'({params[c]["Fertilizer"]:.1f} × x_{i+1})' for i,c in enumerate(selected_crops)])} + d₂⁻ − d₂⁺ = **{target_fert:,.0f} kg**
+- **Goal 3 (Pesticide):** {' + '.join([f'({params[c]["Pesticide"]:.2f} × x_{i+1})' for i,c in enumerate(selected_crops)])} + d₃⁻ − d₃⁺ = **{target_pest:,.0f} kg**
 
-**Actual Deviations After Solving:**
-| Goal | Target | Achieved | Under (d⁻) | Over (d⁺) | Status |
-|---|---|---|---|---|---|
-| Production | {target_prod:,.0f} tons | {gp_total_prod:,.0f} tons | {d1m:,.0f} | {d1p:,.0f} | {"✅ Hit" if d1m < 1 and d1p < 1 else "⚠️ Deviated"} |
-| Fertilizer | {target_fert:,.0f} kg | {gp_fert_used:,.0f} kg | {d2m:,.0f} | {d2p:,.0f} | {"✅ Hit" if d2m < 1 and d2p < 1 else "⚠️ Deviated"} |
-| Pesticide | {target_pest:,.0f} kg | {gp_pest_used:,.0f} kg | {d3m:,.0f} | {d3p:,.0f} | {"✅ Hit" if d3m < 1 and d3p < 1 else "⚠️ Deviated"} |
+**Exact Solved Decision Variables ($x_i$) & Goal Deviations ($d_k$):**
+| Variable | Description / Target | Solved Value | Goal Fulfillment Status |
+|---|---|---|---|
+""" + "\n".join([f"| x_{i+1} | Land for **{c}** | {gp_results[c]:,.2f} ha | Solved Land Allocation |" for i, c in enumerate(selected_crops)]) + f"""
+| d₁⁻ | Production Shortfall | {d1m:,.2f} tons | {"✅ Goal Satisfied" if d1m < 1 else "⚠️ Shortfall"} |
+| d₁⁺ | Production Surplus | {d1p:,.2f} tons | {"ℹ️ Over-achieved" if d1p > 1 else "✅ Target Met"} |
+| d₂⁻ | Fertilizer Under-use | {d2m:,.2f} kg | {"ℹ️ Saved Budget" if d2m > 1 else "✅ Target Met"} |
+| d₂⁺ | Fertilizer Overshoot | {d2p:,.2f} kg | {"✅ Limit Respected" if d2p < 1 else "⚠️ Budget Exceeded"} |
+| d₃⁻ | Pesticide Under-use | {d3m:,.2f} kg | {"ℹ️ Saved Budget" if d3m > 1 else "✅ Target Met"} |
+| d₃⁺ | Pesticide Overshoot | {d3p:,.2f} kg | {"✅ Limit Respected" if d3p < 1 else "⚠️ Budget Exceeded"} |
 
 **Why Area & Yield are not separate GP goals:**
-- *Area* is already the **decision variable** (x_i = land allocated to crop i) — making it a goal would be circular.
-- *Yield* per hectare is a **fixed coefficient** from the dataset (not controllable). We use it in the objective, not as a target.
-- *Rainfall* is not a variable — it is a **fixed exogenous parameter** for the chosen state-year.
+- *Area ($x_i$)* is the **decision variable** being solved for. Minimum land bounds ($x_i \ge \text{{min\_alloc}}$) and historical target shares ($A_i^{{\text{{target}}}}$) are enforced.
+- *Yield* per hectare is a **fixed historical coefficient** derived from data.
+- *Rainfall* is a **fixed exogenous parameter** per state-year.
             """)
 
         # ── Deviation & Target Fulfillment Analysis ─────────────────────────
@@ -914,8 +904,8 @@ a real farmer or policy maker would actually implement — balancing yield, cost
 
 # --- 8. Crop Advisory & Recommendation ---
 elif nav == "8. Crop Advisory & Recommendation":
-    st.markdown('<p class="section-header">🌾 Crop Recommendation & Smart Advisory System</p>', unsafe_allow_html=True)
-    st.info("💡 **Decision Support System for Farmers & Policy Makers:** Enter your region and available land to get instant data-driven crop recommendations, target benchmarks, and land allocation advice.")
+    st.markdown('<p class="section-header">🌾 Smart Crop Advisory & Recommendation System</p>', unsafe_allow_html=True)
+    st.info("💡 **Present-Day Decision Support System (2024 / Now):** Select your State, Season, and Available Land. The system computes historical benchmarks across all multi-year dataset records for your region and generates data-driven sowing recommendations for Linear Programming (Max Tonnage) and Goal Programming (Balanced Multi-Crop Portfolio).")
 
     try:
         df = pd.read_csv("crop_yield.csv")
@@ -928,29 +918,25 @@ elif nav == "8. Crop Advisory & Recommendation":
 
     adv_states = sorted(df['State'].dropna().unique())
     adv_seasons = sorted(df['Season'].dropna().unique())
-    adv_years = sorted(df['Crop_Year'].dropna().astype(int).unique())
 
-    a1, a2, a3, a4 = st.columns(4)
-    adv_state = a1.selectbox("📍 Region / State", adv_states, key="adv_state")
-    adv_season = a2.selectbox("🌾 Season", adv_seasons, key="adv_season")
-    adv_year = a3.selectbox("📅 Base Year", adv_years, index=len(adv_years)-1, key="adv_year")
-    adv_land = a4.number_input("📐 Total Land Available (Hectares)", min_value=10.0, value=5000.0, step=100.0)
+    a1, a2, a3 = st.columns(3)
+    adv_state  = a1.selectbox("📍 Target Region / State", adv_states, key="adv_state")
+    adv_season = a2.selectbox("🌾 Cultivation Season", adv_seasons, key="adv_season")
+    adv_land   = a3.number_input("📐 Total Available Land (Hectares)", min_value=10.0, value=2500.0, step=100.0)
 
-    df_adv = df[(df['State'] == adv_state) & (df['Season'] == adv_season) & (df['Crop_Year'] == adv_year)]
+    # Filter historical dataset across ALL years for this State & Season
+    df_adv = df[(df['State'] == adv_state) & (df['Season'] == adv_season)]
     adv_crops = sorted(df_adv['Crop'].dropna().unique())
 
     if not adv_crops:
-        st.warning(f"No historical crop data available for {adv_state} / {adv_season} / {adv_year}.")
+        st.warning(f"No historical crop data available for {adv_state} / {adv_season}.")
         st.stop()
 
-    st.markdown("---")
-    st.markdown("### 🌟 Smart Recommended Sowing Portfolio")
-
-    # Compute parameters for all available crops
+    # Compute multi-year baseline parameters for all crops in this State & Season
     adv_params = {}
     for crop in adv_crops:
         cd = df_adv[df_adv['Crop'] == crop]
-        yld = float(cd['Yield'].mean()) if not cd['Yield'].empty else 1.0
+        yld  = float(cd['Yield'].mean()) if not cd['Yield'].empty else 1.0
         area = float(cd['Area'].mean()) if not cd['Area'].empty else 1.0
         prod = float(cd['Production'].mean()) if not cd['Production'].empty else 0.0
         fert = float(cd['Fertilizer'].mean()) if not cd['Fertilizer'].empty else 0.0
@@ -958,32 +944,65 @@ elif nav == "8. Crop Advisory & Recommendation":
         fpha = fert / area if area > 0 else 50.0
         ppha = pest / area if area > 0 else 5.0
         adv_params[crop] = {
-            'Yield': yld if not np.isnan(yld) else 1.0,
+            'Yield': yld if not np.isnan(yld) and yld > 0 else 1.0,
             'Fertilizer': fpha if not np.isnan(fpha) else 50.0,
             'Pesticide': ppha if not np.isnan(ppha) else 5.0,
             'Area': area, 'Production': prod
         }
 
-    # Run quick optimization for advisory
-    from scipy.optimize import linprog
     n_adv = len(adv_crops)
     adv_yields = np.array([adv_params[c]['Yield'] for c in adv_crops])
-    adv_ferts = np.array([adv_params[c]['Fertilizer'] for c in adv_crops])
-    adv_pests = np.array([adv_params[c]['Pesticide'] for c in adv_crops])
-    adv_areas = np.array([adv_params[c]['Area'] for c in adv_crops])
+    adv_ferts  = np.array([adv_params[c]['Fertilizer'] for c in adv_crops])
+    adv_pests  = np.array([adv_params[c]['Pesticide'] for c in adv_crops])
+    adv_areas  = np.array([adv_params[c]['Area'] for c in adv_crops])
 
     rec_total_area = adv_areas.sum()
     target_crop_areas_a = adv_land * (adv_areas / max(rec_total_area, 1.0))
-    rec_target_prod = float(adv_yields @ target_crop_areas_a)
-    rec_target_fert = float(adv_ferts @ target_crop_areas_a)
-    rec_target_pest = float(adv_pests @ target_crop_areas_a)
+    
+    # Baseline benchmarks
+    benchmark_prod = float(adv_yields @ target_crop_areas_a)
+    benchmark_fert = float(adv_ferts @ target_crop_areas_a)
+    benchmark_pest = float(adv_pests @ target_crop_areas_a)
 
-    # Multi-Goal GP Advisory Run
+    st.markdown("---")
+    st.markdown("### 🎛️ Customize Constraints & Goals for Your Farm")
+    st.caption("We have pre-filled the recommended data-driven benchmarks below. You can adjust them to simulate your custom budget, chemical caps, or target goals!")
+
+    c_col1, c_col2, c_col3 = st.columns(3)
+    sim_max_fert = c_col1.number_input(
+        "🧪 Max Fertilizer Budget (kg)", min_value=100.0,
+        value=float(benchmark_fert), step=5000.0,
+        help=f"Recommended: {benchmark_fert:,.0f} kg based on regional historical average."
+    )
+    sim_max_pest = c_col2.number_input(
+        "🐛 Max Pesticide Budget (kg)", min_value=10.0,
+        value=float(benchmark_pest), step=500.0,
+        help=f"Recommended: {benchmark_pest:,.0f} kg based on regional historical average."
+    )
+    sim_target_prod = c_col3.number_input(
+        "🌾 Target Production (tons) [GP]", min_value=100.0,
+        value=float(benchmark_prod * 0.95), step=1000.0,
+        help=f"Recommended: {benchmark_prod*0.95:,.0f} tons (95% of expected historical yield)."
+    )
+
+    # ── Solve Advisory Optimization ──────────────────────────────────────
+    from scipy.optimize import linprog
+
+    # 1. LP Solve
+    lp_c_a = -adv_yields
+    lp_A_a = np.vstack([np.ones(n_adv), adv_ferts, adv_pests])
+    lp_b_a = [adv_land, sim_max_fert, sim_max_pest]
+    lp_bounds_a = [(0.01 * adv_land / n_adv, None)] * n_adv
+
+    lp_res_a = linprog(lp_c_a, A_ub=lp_A_a, b_ub=lp_b_a, bounds=lp_bounds_a, method='highs')
+    lp_adv_alloc = lp_res_a.x if lp_res_a.success else target_crop_areas_a
+
+    # 2. GP Solve (Multi-Goal Pattern Balancing)
     nv_a = n_adv + 6 + 2 * n_adv
     gp_c_a = np.zeros(nv_a)
-    gp_c_a[n_adv]   = 10.0 / max(rec_target_prod, 1.0)
-    gp_c_a[n_adv+3] = 10.0 / max(rec_target_fert, 1.0)
-    gp_c_a[n_adv+5] = 10.0 / max(rec_target_pest, 1.0)
+    gp_c_a[n_adv]   = 10.0 / max(sim_target_prod, 1.0)
+    gp_c_a[n_adv+3] = 10.0 / max(sim_max_fert, 1.0)
+    gp_c_a[n_adv+5] = 10.0 / max(sim_max_pest, 1.0)
 
     for i in range(n_adv):
         w_c = 1.0 / max(target_crop_areas_a[i], 1.0)
@@ -1003,57 +1022,69 @@ elif nav == "8. Crop Advisory & Recommendation":
         gp_A_eq_a[3 + i, n_adv + 6 + 2*i]     = 1
         gp_A_eq_a[3 + i, n_adv + 6 + 2*i + 1] = -1
 
-    gp_b_eq_a = [rec_target_prod, rec_target_fert, rec_target_pest] + list(target_crop_areas_a)
-    gp_res_a = linprog(gp_c_a, A_ub=gp_A_ub_a, b_ub=gp_b_ub_a, A_eq=gp_A_eq_a, b_eq=gp_b_eq_a, bounds=[(0, None)]*nv_a, method='highs')
+    gp_b_eq_a = [sim_target_prod, sim_max_fert, sim_max_pest] + list(target_crop_areas_a)
+    gp_res_a = linprog(gp_c_a, A_ub=gp_A_ub_a, b_ub=gp_b_ub_a, A_eq=gp_A_eq_a, b_eq=gp_b_eq_a, bounds=[(0.01*adv_land/n_adv, None)]*nv_a, method='highs')
+    gp_adv_alloc = gp_res_a.x[:n_adv] if gp_res_a.success else target_crop_areas_a
 
-    adv_alloc = gp_res_a.x[:n_adv] if gp_res_a.success else target_crop_areas_a
-
-    # Advisory Display Columns
-    col_rec1, col_rec2 = st.columns(2)
-    with col_rec1:
-        st.markdown("#### 🥇 Pure Maximization Strategy (LP)")
-        top_lp_idx = np.argmax(adv_yields)
-        st.success(f"**Top Recommended Crop:** `{adv_crops[top_lp_idx]}`\n\n"
-                   f"- **Recommended Allocation:** {adv_land:,.0f} ha (100% of Land)\n"
-                   f"- **Expected Production:** {adv_yields[top_lp_idx] * adv_land:,.0f} tons\n"
-                   f"- **Best For:** Commercial monoculture & maximum total yield output.")
-
-    with col_rec2:
-        st.markdown("#### 🛡️ Balanced Diversified Strategy (GP)")
-        top_gp_indices = np.argsort(adv_alloc)[::-1][:min(3, n_adv)]
-        top_gp_crops_str = ", ".join([f"`{adv_crops[i]}` ({adv_alloc[i]/adv_land*100:.1f}%)" for i in top_gp_indices])
-        st.info(f"**Top Recommended Crop Mix:** {top_gp_crops_str}\n\n"
-                f"- **Recommended Allocation:** Distributed across {sum(1 for a in adv_alloc if a > 1)} crops\n"
-                f"- **Expected Production:** {adv_yields @ adv_alloc:,.0f} tons\n"
-                f"- **Best For:** Risk mitigation, food security, and soil preservation.")
-
+    # ── Display Recommendations ──────────────────────────────────────────
     st.markdown("---")
-    st.markdown("### 📋 Recommended Crop Sowing Table")
-    adv_df = pd.DataFrame({
-        'Crop Name': adv_crops,
-        'Recommended Area (ha)': [adv_alloc[i] for i in range(n_adv)],
-        'Land Share (%)': [(adv_alloc[i] / adv_land * 100) for i in range(n_adv)],
-        'Expected Yield (tons/ha)': [adv_yields[i] for i in range(n_adv)],
-        'Estimated Production (tons)': [adv_yields[i] * adv_alloc[i] for i in range(n_adv)],
-        'Fertilizer Footprint (kg)': [adv_ferts[i] * adv_alloc[i] for i in range(n_adv)],
-    })
-    st.dataframe(adv_df.sort_values(by='Recommended Area (ha)', ascending=False).style.format({
-        'Recommended Area (ha)': '{:,.1f}',
-        'Land Share (%)': '{:.2f}%',
-        'Expected Yield (tons/ha)': '{:.2f}',
-        'Estimated Production (tons)': '{:,.1f}',
-        'Fertilizer Footprint (kg)': '{:,.1f}'
-    }), use_container_width=True, hide_index=True)
+    st.markdown("### 🌟 Smart Recommended Sowing Portfolios")
 
-    # Pie Chart of Advisory Land Allocation
-    fig_adv_pie = go.Figure(data=[go.Pie(
-        labels=[c for i, c in enumerate(adv_crops) if adv_alloc[i] > 1],
-        values=[adv_alloc[i] for i in range(n_adv) if adv_alloc[i] > 1],
-        hole=0.4,
-        textinfo='label+percent'
-    )])
-    fig_adv_pie.update_layout(title=f"Recommended Crop Portfolio Distribution for {adv_state} ({adv_season} {adv_year})", height=450)
-    st.plotly_chart(fig_adv_pie, use_container_width=True)
+    r_col1, r_col2 = st.columns(2)
+    with r_col1:
+        st.markdown("#### 🥇 Linear Programming Sowing Plan (Max Production)")
+        top_lp_idx = np.argmax(lp_adv_alloc)
+        st.success(f"""
+        **Top Focus Crop:** `{adv_crops[top_lp_idx]}`
+        - **Allocated Area:** {lp_adv_alloc[top_lp_idx]:,.0f} ha ({lp_adv_alloc[top_lp_idx]/adv_land*100:.1f}% of land)
+        - **Expected Total Production:** {adv_yields @ lp_adv_alloc:,.0f} tons
+        - **Fertilizer Used:** {adv_ferts @ lp_adv_alloc:,.0f} kg
+        - **Best For:** Maximum single-commodity tonnage and industrial supply contracts.
+        """)
+
+    with r_col2:
+        st.markdown("#### 🛡️ Goal Programming Sowing Plan (Diversified Mix)")
+        top_gp_indices = np.argsort(gp_adv_alloc)[::-1][:min(3, n_adv)]
+        top_gp_str = ", ".join([f"`{adv_crops[i]}` ({gp_adv_alloc[i]/adv_land*100:.1f}%)" for i in top_gp_indices])
+        st.info(f"""
+        **Recommended Crop Portfolio:** {top_gp_str}
+        - **Allocated Area:** Balanced across {sum(1 for a in gp_adv_alloc if a > 1)} crops
+        - **Expected Total Production:** {adv_yields @ gp_adv_alloc:,.0f} tons
+        - **Fertilizer Used:** {adv_ferts @ gp_adv_alloc:,.0f} kg
+        - **Best For:** Risk mitigation, food security, and maintaining soil health.
+        """)
+
+    # ── Sowing Guide Table & Donut Chart ─────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📋 Detailed Crop Sowing Breakdown")
+
+    chart_tab, table_tab = st.tabs(["📊 Land Allocation Donut Chart", "📋 Sowing Guide Table"])
+
+    with chart_tab:
+        fig_adv_pie = go.Figure(data=[go.Pie(
+            labels=[c for i, c in enumerate(adv_crops) if gp_adv_alloc[i] > 1],
+            values=[gp_adv_alloc[i] for i in range(n_adv) if gp_adv_alloc[i] > 1],
+            hole=0.4, textinfo='label+percent'
+        )])
+        fig_adv_pie.update_layout(title=f"GP Recommended Crop Portfolio Distribution for {adv_state} ({adv_season})", height=450)
+        st.plotly_chart(fig_adv_pie, use_container_width=True)
+
+    with table_tab:
+        adv_df = pd.DataFrame({
+            'Crop Name': adv_crops,
+            'LP Area (ha)': [lp_adv_alloc[i] for i in range(n_adv)],
+            'GP Area (ha)': [gp_adv_alloc[i] for i in range(n_adv)],
+            'GP Share (%)': [(gp_adv_alloc[i] / adv_land * 100) for i in range(n_adv)],
+            'Yield (tons/ha)': [adv_yields[i] for i in range(n_adv)],
+            'Est. GP Prod (tons)': [adv_yields[i] * gp_adv_alloc[i] for i in range(n_adv)],
+        })
+        st.dataframe(adv_df.sort_values(by='GP Area (ha)', ascending=False).style.format({
+            'LP Area (ha)': '{:,.1f}',
+            'GP Area (ha)': '{:,.1f}',
+            'GP Share (%)': '{:.2f}%',
+            'Yield (tons/ha)': '{:.2f}',
+            'Est. GP Prod (tons)': '{:,.1f}'
+        }), use_container_width=True, hide_index=True)
 
 
 # --- 9. Team Contribution ---
