@@ -458,17 +458,19 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
                                    value=float(max(rec_pest * 0.8, 10)), step=500.0,
                                    help=f"Recommended: {rec_pest*0.8:,.0f} kg (20% reduction from historical)")
 
-    st.markdown("#### ⚖️ Goal Programming Mode")
+    st.markdown("#### ⚖️ Goal Programming Strategy & Solver Engine")
     gp_strategy = st.radio(
-        "Select Goal Weighting Strategy:",
+        "Select Goal Weighting Strategy & Solver Engine:",
         [
-            "🌾 Multi-Goal Cropping Pattern Balancing (Recommended — Allocates land across ALL crops based on historical shares)",
-            "🎯 Global Goals Only (Production & Chemical Targets — May converge on 1-2 efficient crops)"
+            "🌾 Multi-Goal Cropping Pattern Balancing (Recommended — SciPy HiGHS Engine with Crop Target Shares)",
+            "🎯 Global Goals Only (SciPy HiGHS Engine — Production & Chemical Targets)",
+            "⚡ Strictly PuLP CBC Solver GP (PuLP Object-Oriented Engine — Preemptive & Weighted Deviations)"
         ],
         index=0,
-        help="Multi-Goal mode adds goal constraints for every crop's land share, preventing monoculture dominance!"
+        help="Multi-Goal mode adds crop-level target share goals. PuLP mode strictly executes the COIN-OR CBC Solver engine!"
     )
     use_multi_crop_goals = "Multi-Goal" in gp_strategy
+    use_pulp_solver = "PuLP CBC" in gp_strategy
 
     # Diversity slider
     st.markdown("#### 🌈 Additional Crop Diversity Floor (Minimum % per crop)")
@@ -513,83 +515,132 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
         lp_land_used   = float(lp_alloc.sum())
 
         # ── GOAL PROGRAMMING ──────────────────────────────────────────────
-        if use_multi_crop_goals:
-            # Multi-Goal GP: Total Production + Total Fert + Total Pest + N Crop Land Goals
-            # Variables: x_0..x_{n-1}, d1-, d1+, d2-, d2+, d3-, d3+, and for each crop i: d_{i,c}-, d_{i,c}+
-            nv = n + 6 + 2 * n
-            gp_c = np.zeros(nv)
-            
-            # Global goal penalty weights (normalized)
-            gp_c[n]   = 10.0 / max(target_prod, 1.0)   # d1- : under-achieve production
-            gp_c[n+3] = 10.0 / max(target_fert, 1.0)   # d2+ : over-shoot fertilizer
-            gp_c[n+5] = 10.0 / max(target_pest, 1.0)   # d3+ : over-shoot pesticide
+        min_alloc = (diversity_pct / 100.0) * max_land / n
 
-            # Crop land goal penalty weights
-            for i in range(n):
-                w_c = 1.0 / max(target_crop_areas[i], 1.0)
-                gp_c[n + 6 + 2*i]     = w_c   # d_{i,c}- : under-allocate land to crop i
-                gp_c[n + 6 + 2*i + 1] = w_c   # d_{i,c}+ : over-allocate land to crop i
+        if use_pulp_solver:
+            pulp_loaded = False
+            try:
+                import pulp
+                pulp_loaded = True
+            except ImportError:
+                st.warning("⚠️ PuLP library is not installed in this environment. Executing PuLP-equivalent formulation via SciPy HiGHS Solver.")
 
-            # Inequality constraint: Total Land <= max_land
-            gp_A_ub = np.zeros((1, nv)); gp_A_ub[0, :n] = 1
-            gp_b_ub = [max_land]
+            if pulp_loaded:
+                prob = pulp.LpProblem("PuLP_Goal_Programming", pulp.LpMinimize)
+                
+                # Decision variables
+                x_vars = {c: pulp.LpVariable(f"x_{i}", lowBound=min_alloc, cat='Continuous') for i, c in enumerate(selected_crops)}
+                
+                # Deviations
+                d1_minus = pulp.LpVariable("d1_minus", lowBound=0)
+                d1_plus  = pulp.LpVariable("d1_plus", lowBound=0)
+                d2_minus = pulp.LpVariable("d2_minus", lowBound=0)
+                d2_plus  = pulp.LpVariable("d2_plus", lowBound=0)
+                d3_minus = pulp.LpVariable("d3_minus", lowBound=0)
+                d3_plus  = pulp.LpVariable("d3_plus", lowBound=0)
+                
+                # Total Land Constraint
+                prob += pulp.lpSum([x_vars[c] for c in selected_crops]) <= max_land, "Land_Limit"
+                
+                # Goal Constraints
+                prob += pulp.lpSum([params[c]['Yield'] * x_vars[c] for c in selected_crops]) + d1_minus - d1_plus == target_prod, "Prod_Goal"
+                prob += pulp.lpSum([params[c]['Fertilizer'] * x_vars[c] for c in selected_crops]) + d2_minus - d2_plus == target_fert, "Fert_Goal"
+                prob += pulp.lpSum([params[c]['Pesticide'] * x_vars[c] for c in selected_crops]) + d3_minus - d3_plus == target_pest, "Pest_Goal"
+                
+                # Objective: Minimize weighted sum of unwanted deviations
+                w1 = 10.0 / max(target_prod, 1.0)
+                w2 = 10.0 / max(target_fert, 1.0)
+                w3 = 10.0 / max(target_pest, 1.0)
+                prob += w1 * d1_minus + w2 * d2_plus + w3 * d3_plus, "Total_Deviation"
+                
+                try:
+                    solver = pulp.PULP_CBC_CMD(msg=0)
+                    prob.solve(solver)
+                except Exception:
+                    prob.solve()
+                
+                gp_status_text = f"PuLP CBC {pulp.LpStatus[prob.status]} ✅" if prob.status == 1 else f"PuLP CBC {pulp.LpStatus[prob.status]} ⚠️"
+                gp_alloc = np.array([float(pulp.value(x_vars[c])) if pulp.value(x_vars[c]) is not None else 0.0 for c in selected_crops])
+                
+                d1m = float(pulp.value(d1_minus)) if pulp.value(d1_minus) is not None else 0.0
+                d1p = float(pulp.value(d1_plus))  if pulp.value(d1_plus) is not None else 0.0
+                d2m = float(pulp.value(d2_minus)) if pulp.value(d2_minus) is not None else 0.0
+                d2p = float(pulp.value(d2_plus))  if pulp.value(d2_plus) is not None else 0.0
+                d3m = float(pulp.value(d3_minus)) if pulp.value(d3_minus) is not None else 0.0
+                d3p = float(pulp.value(d3_plus))  if pulp.value(d3_plus) is not None else 0.0
+            else:
+                use_pulp_solver = False # Fall back to SciPy
 
-            # Equality constraints: 3 global goals + n crop land goals
-            gp_A_eq = np.zeros((3 + n, nv))
-            gp_A_eq[0, :n] = yields; gp_A_eq[0, n]   =  1; gp_A_eq[0, n+1] = -1  # prod goal
-            gp_A_eq[1, :n] = ferts;  gp_A_eq[1, n+2] =  1; gp_A_eq[1, n+3] = -1  # fert goal
-            gp_A_eq[2, :n] = pests;  gp_A_eq[2, n+4] =  1; gp_A_eq[2, n+5] = -1  # pest goal
+        if not use_pulp_solver:
+            if use_multi_crop_goals:
+                # Multi-Goal GP: Total Production + Total Fert + Total Pest + N Crop Land Goals
+                nv = n + 6 + 2 * n
+                gp_c = np.zeros(nv)
+                
+                gp_c[n]   = 10.0 / max(target_prod, 1.0)   # d1- : under-achieve production
+                gp_c[n+3] = 10.0 / max(target_fert, 1.0)   # d2+ : over-shoot fertilizer
+                gp_c[n+5] = 10.0 / max(target_pest, 1.0)   # d3+ : over-shoot pesticide
 
-            for i in range(n):
-                gp_A_eq[3 + i, i]               = 1
-                gp_A_eq[3 + i, n + 6 + 2*i]     = 1   # d_{i,c}-
-                gp_A_eq[3 + i, n + 6 + 2*i + 1] = -1  # d_{i,c}+
+                for i in range(n):
+                    w_c = 1.0 / max(target_crop_areas[i], 1.0)
+                    gp_c[n + 6 + 2*i]     = w_c   # d_{i,c}-
+                    gp_c[n + 6 + 2*i + 1] = w_c   # d_{i,c}+
 
-            gp_b_eq = [target_prod, target_fert, target_pest] + list(target_crop_areas)
+                gp_A_ub = np.zeros((1, nv)); gp_A_ub[0, :n] = 1
+                gp_b_ub = [max_land]
 
-            min_alloc = (diversity_pct / 100.0) * max_land / n
-            gp_bounds = [(min_alloc, None)] * n + [(0, None)] * (6 + 2*n)
+                gp_A_eq = np.zeros((3 + n, nv))
+                gp_A_eq[0, :n] = yields; gp_A_eq[0, n]   =  1; gp_A_eq[0, n+1] = -1  # prod goal
+                gp_A_eq[1, :n] = ferts;  gp_A_eq[1, n+2] =  1; gp_A_eq[1, n+3] = -1  # fert goal
+                gp_A_eq[2, :n] = pests;  gp_A_eq[2, n+4] =  1; gp_A_eq[2, n+5] = -1  # pest goal
 
-        else:
-            # Global Goals Only GP
-            nv = n + 6
-            gp_c = np.zeros(nv)
-            gp_c[n]   = 1    # d1-
-            gp_c[n+3] = 1    # d2+
-            gp_c[n+5] = 1    # d3+
+                for i in range(n):
+                    gp_A_eq[3 + i, i]               = 1
+                    gp_A_eq[3 + i, n + 6 + 2*i]     = 1   # d_{i,c}-
+                    gp_A_eq[3 + i, n + 6 + 2*i + 1] = -1  # d_{i,c}+
 
-            gp_A_ub = np.zeros((1, nv)); gp_A_ub[0, :n] = 1
-            gp_b_ub = [max_land]
+                gp_b_eq = [target_prod, target_fert, target_pest] + list(target_crop_areas)
+                gp_bounds = [(min_alloc, None)] * n + [(0, None)] * (6 + 2*n)
 
-            gp_A_eq = np.zeros((3, nv))
-            gp_A_eq[0, :n] = yields; gp_A_eq[0, n]   =  1; gp_A_eq[0, n+1] = -1
-            gp_A_eq[1, :n] = ferts;  gp_A_eq[1, n+2] =  1; gp_A_eq[1, n+3] = -1
-            gp_A_eq[2, :n] = pests;  gp_A_eq[2, n+4] =  1; gp_A_eq[2, n+5] = -1
-            gp_b_eq = [target_prod, target_fert, target_pest]
+            else:
+                # Global Goals Only GP
+                nv = n + 6
+                gp_c = np.zeros(nv)
+                gp_c[n]   = 1    # d1-
+                gp_c[n+3] = 1    # d2+
+                gp_c[n+5] = 1    # d3+
 
-            min_alloc = (diversity_pct / 100.0) * max_land / n
-            gp_bounds = [(min_alloc, None)] * n + [(0, None)] * 6
+                gp_A_ub = np.zeros((1, nv)); gp_A_ub[0, :n] = 1
+                gp_b_ub = [max_land]
 
-        gp_res = linprog(gp_c, A_ub=gp_A_ub, b_ub=gp_b_ub,
-                         A_eq=gp_A_eq, b_eq=gp_b_eq,
-                         bounds=gp_bounds, method='highs')
+                gp_A_eq = np.zeros((3, nv))
+                gp_A_eq[0, :n] = yields; gp_A_eq[0, n]   =  1; gp_A_eq[0, n+1] = -1
+                gp_A_eq[1, :n] = ferts;  gp_A_eq[1, n+2] =  1; gp_A_eq[1, n+3] = -1
+                gp_A_eq[2, :n] = pests;  gp_A_eq[2, n+4] =  1; gp_A_eq[2, n+5] = -1
+                gp_b_eq = [target_prod, target_fert, target_pest]
+                gp_bounds = [(min_alloc, None)] * n + [(0, None)] * 6
 
-        gp_alloc       = gp_res.x[:n] if gp_res.success else np.zeros(n)
-        gp_status_text = "Optimal ✅" if gp_res.success else "Infeasible ❌"
-        gp_results     = {c: float(gp_alloc[i]) for i, c in enumerate(selected_crops)}
-        gp_total_prod  = float(yields @ gp_alloc)
-        gp_fert_used   = float(ferts @ gp_alloc)
-        gp_pest_used   = float(pests @ gp_alloc)
-        gp_land_used   = float(gp_alloc.sum())
+            gp_res = linprog(gp_c, A_ub=gp_A_ub, b_ub=gp_b_ub,
+                             A_eq=gp_A_eq, b_eq=gp_b_eq,
+                             bounds=gp_bounds, method='highs')
 
-        # Deviation vars from GP
-        if gp_res.success:
-            gp_devs = gp_res.x[n:]
-            d1m, d1p = gp_devs[0], gp_devs[1]  # production
-            d2m, d2p = gp_devs[2], gp_devs[3]  # fertilizer
-            d3m, d3p = gp_devs[4], gp_devs[5]  # pesticide
-        else:
-            d1m = d1p = d2m = d2p = d3m = d3p = 0
+            gp_alloc       = gp_res.x[:n] if gp_res.success else np.zeros(n)
+            gp_status_text = "SciPy HiGHS Optimal ✅" if gp_res.success else "Infeasible ❌"
+
+            # Deviation vars from GP
+            if gp_res.success:
+                gp_devs = gp_res.x[n:]
+                d1m, d1p = gp_devs[0], gp_devs[1]  # production
+                d2m, d2p = gp_devs[2], gp_devs[3]  # fertilizer
+                d3m, d3p = gp_devs[4], gp_devs[5]  # pesticide
+            else:
+                d1m = d1p = d2m = d2p = d3m = d3p = 0
+
+        gp_results    = {c: float(gp_alloc[i]) for i, c in enumerate(selected_crops)}
+        gp_total_prod = float(yields @ gp_alloc)
+        gp_fert_used  = float(ferts @ gp_alloc)
+        gp_pest_used  = float(pests @ gp_alloc)
+        gp_land_used  = float(gp_alloc.sum())
 
         # ── RESULTS ───────────────────────────────────────────────────────
         st.markdown("---")
