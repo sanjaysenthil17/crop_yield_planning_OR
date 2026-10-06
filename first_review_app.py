@@ -301,62 +301,102 @@ elif nav == "7. Final Dashboard":
 
     # ── Calculate Parameters ───────────────────────────────────────────────
     params = {}
+    # State-level totals for computing true per-ha averages
+    all_crop_data = df_yr[df_yr['Crop'].isin(selected_crops)]
+    state_total_area = all_crop_data['Area'].sum()
+    state_total_fert = all_crop_data['Fertilizer'].sum()
+    state_total_pest = all_crop_data['Pesticide'].sum()
+    state_avg_fert_ha = state_total_fert / state_total_area if state_total_area > 0 else 50.0
+    state_avg_pest_ha = state_total_pest / state_total_area if state_total_area > 0 else 5.0
+
     for crop in selected_crops:
         cd = df_yr[df_yr['Crop'] == crop]
-        yld  = cd['Yield'].mean()
-        fpha = (cd['Fertilizer'] / cd['Area']).replace([np.inf, -np.inf], np.nan).mean()
-        ppha = (cd['Pesticide']  / cd['Area']).replace([np.inf, -np.inf], np.nan).mean()
+        yld       = cd['Yield'].mean()
         area_hist = cd['Area'].mean()
         prod_hist = cd['Production'].mean()
-        fert_hist = cd['Fertilizer'].mean()
-        pest_hist = cd['Pesticide'].mean()
+        fert_hist = cd['Fertilizer'].mean()   # actual total fertilizer for this crop
+        pest_hist = cd['Pesticide'].mean()    # actual total pesticide for this crop
+        fpha      = fert_hist / area_hist if area_hist > 0 else state_avg_fert_ha
+        ppha      = pest_hist / area_hist if area_hist > 0 else state_avg_pest_ha
 
         params[crop] = {
-            'Yield':        float(yld)   if not pd.isna(yld)   else 1.0,
-            'Fertilizer':   float(fpha)  if not pd.isna(fpha)  else 50.0,
-            'Pesticide':    float(ppha)  if not pd.isna(ppha)  else 5.0,
-            'Area_hist':    float(area_hist)  if not pd.isna(area_hist)  else 0,
-            'Prod_hist':    float(prod_hist)  if not pd.isna(prod_hist)  else 0,
-            'Fert_hist':    float(fert_hist)  if not pd.isna(fert_hist)  else 0,
-            'Pest_hist':    float(pest_hist)  if not pd.isna(pest_hist)  else 0,
+            'Yield':      float(yld)       if not pd.isna(yld)       else 1.0,
+            'Fertilizer': float(fpha)      if not pd.isna(fpha)      else state_avg_fert_ha,
+            'Pesticide':  float(ppha)      if not pd.isna(ppha)      else state_avg_pest_ha,
+            'Area_hist':  float(area_hist) if not pd.isna(area_hist) else 0,
+            'Prod_hist':  float(prod_hist) if not pd.isna(prod_hist) else 0,
+            'Fert_hist':  float(fert_hist) if not pd.isna(fert_hist) else 0,
+            'Pest_hist':  float(pest_hist) if not pd.isna(pest_hist) else 0,
         }
+
+    # Check if fert/ha is nearly identical across all crops (dataset limitation)
+    fert_values = [params[c]['Fertilizer'] for c in selected_crops]
+    fert_cv = (np.std(fert_values) / np.mean(fert_values)) if np.mean(fert_values) > 0 else 0
+    dataset_has_uniform_fert = fert_cv < 0.01  # less than 1% variation = essentially identical
 
     # ── Parameter Table + Coefficient Chart ───────────────────────────────
     with st.expander("📊 Step 3 — View Crop Parameters (Derived from Dataset)", expanded=True):
-        st.markdown("""
-        **How parameters are computed:** For the selected **State × Season × Year**, the dataset is filtered
-        to that specific row. `Yield` (tons/ha) is read directly. `Fertilizer/ha` and `Pesticide/ha` are
-        computed as `Total Fertilizer ÷ Area`. These become the **coefficients** in our LP and GP equations.
-        """)
+        if dataset_has_uniform_fert:
+            st.warning("""
+⚠️ **Dataset Limitation Detected:** The Fertilizer (kg/ha) and Pesticide (kg/ha) values are **identical across all crops**.
+This is because this dataset stores **state-level total fertilizer** distributed proportionally by crop area —
+so `Fertilizer ÷ Area = State_Total_Fertilizer ÷ State_Total_Area` = a constant for all crops in the same state-year.
+
+**Impact on optimization:** The fertilizer constraint effectively becomes a second land constraint (just scaled).
+The real differentiator between crops is **Yield (tons/ha)** — which varies significantly.
+The historical Fertilizer and Pesticide **totals** below show the actual dataset values per crop (they differ because areas differ).
+            """)
+        else:
+            st.markdown("""
+**How parameters are computed:** For the selected **State × Season × Year**, `Yield` (tons/ha) is read directly.
+`Fertilizer/ha` and `Pesticide/ha` are computed as `Total Fertilizer ÷ Area`. These become the **coefficients** in our LP and GP equations.
+            """)
+
         param_df = pd.DataFrame({
-            'Yield (tons/ha)':      {c: params[c]['Yield']      for c in selected_crops},
-            'Fertilizer (kg/ha)':   {c: params[c]['Fertilizer'] for c in selected_crops},
-            'Pesticide (kg/ha)':    {c: params[c]['Pesticide']  for c in selected_crops},
-            'Historical Area (ha)': {c: params[c]['Area_hist']  for c in selected_crops},
-            'Historical Prod (tons)':{c: params[c]['Prod_hist'] for c in selected_crops},
+            'Yield (tons/ha)':         {c: params[c]['Yield']      for c in selected_crops},
+            'Fert/ha (kg)':            {c: params[c]['Fertilizer'] for c in selected_crops},
+            'Pest/ha (kg)':            {c: params[c]['Pesticide']  for c in selected_crops},
+            'Hist. Area (ha)':         {c: params[c]['Area_hist']  for c in selected_crops},
+            'Hist. Fert Total (kg)':   {c: params[c]['Fert_hist']  for c in selected_crops},
+            'Hist. Pest Total (kg)':   {c: params[c]['Pest_hist']  for c in selected_crops},
+            'Hist. Production (tons)': {c: params[c]['Prod_hist']  for c in selected_crops},
         })
         st.dataframe(param_df.style.format("{:.2f}"), use_container_width=True)
 
         # Coefficient visualization
-        st.markdown("#### 📈 Coefficient Comparison Chart")
-        st.caption("These bars show the relative weight each crop has in the objective function and constraint equations.")
+        st.markdown("#### 📈 Coefficient Comparison Charts")
         cc1, cc2 = st.columns(2)
         with cc1:
             fig_coef = go.Figure()
             fig_coef.add_trace(go.Bar(name='Yield (tons/ha)', x=selected_crops,
-                                      y=[params[c]['Yield'] for c in selected_crops], marker_color='#22c55e'))
-            fig_coef.update_layout(title="Yield Coefficient (LP Objective — higher = more preferred by LP)",
-                                   xaxis_tickangle=-30, height=320)
+                                      y=[params[c]['Yield'] for c in selected_crops],
+                                      marker_color='#22c55e',
+                                      text=[f"{params[c]['Yield']:.2f}" for c in selected_crops],
+                                      textposition='outside'))
+            fig_coef.update_layout(title="Yield Coefficient per crop (LP Objective — LP allocates land to highest yield crops)",
+                                   xaxis_tickangle=-35, height=350)
             st.plotly_chart(fig_coef, use_container_width=True)
         with cc2:
-            fig_fert = go.Figure()
-            fig_fert.add_trace(go.Bar(name='Fertilizer/ha', x=selected_crops,
-                                      y=[params[c]['Fertilizer'] for c in selected_crops], marker_color='#f59e0b'))
-            fig_fert.add_trace(go.Bar(name='Pesticide/ha', x=selected_crops,
-                                      y=[params[c]['Pesticide'] for c in selected_crops], marker_color='#ef4444'))
-            fig_fert.update_layout(title="Constraint Coefficients (higher = heavier on your budget)",
-                                   barmode='group', xaxis_tickangle=-30, height=320)
-            st.plotly_chart(fig_fert, use_container_width=True)
+            fig_hist = go.Figure()
+            fig_hist.add_trace(go.Bar(name='Historical Fert Total (kg)', x=selected_crops,
+                                      y=[params[c]['Fert_hist'] for c in selected_crops],
+                                      marker_color='#f59e0b'))
+            fig_hist.add_trace(go.Bar(name='Historical Pest Total (kg)', x=selected_crops,
+                                      y=[params[c]['Pest_hist'] for c in selected_crops],
+                                      marker_color='#ef4444'))
+            fig_hist.update_layout(title="Historical Resource Totals per Crop (these DO vary — shows crop's actual resource footprint)",
+                                   barmode='group', xaxis_tickangle=-35, height=350)
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+        st.caption("""
+**Why Area and Yield are not optimization variables/targets:**
+- **Area (x_i)** IS our decision variable — it's what LP/GP *solves for*. You can't set it as a target at the same time.
+- **Yield (tons/ha)** is a *fixed historical coefficient* from the dataset — nature/farming conditions determine yield, not us. We use it as the LP objective coefficient.
+- **Rainfall** is a fixed exogenous parameter per state-year. It's informational only.
+- **Max Area per crop** CAN be constrained via the Diversity slider below — this gives each crop a minimum guaranteed allocation.
+        """)
+
+
 
     # ── Smart Recommendations ─────────────────────────────────────────────
     rec_land  = sum(params[c]['Area_hist']  for c in selected_crops)
@@ -617,19 +657,76 @@ $$Z_{{GP}} = d_1^- + d_2^+ + d_3^+$$
 - *Rainfall* is not a variable — it is a **fixed exogenous parameter** for the chosen state-year.
             """)
 
-        # ── Deviation Bar Chart ────────────────────────────────────────────
-        st.markdown("### 📉 GP Deviation Analysis")
-        dev_fig = go.Figure()
-        dev_fig.add_trace(go.Bar(name='Under-achievement (d⁻)',
-                                  x=['Production', 'Fertilizer', 'Pesticide'],
-                                  y=[d1m, d2m, d3m], marker_color='#ef4444'))
-        dev_fig.add_trace(go.Bar(name='Over-achievement (d⁺)',
-                                  x=['Production', 'Fertilizer', 'Pesticide'],
-                                  y=[d1p, d2p, d3p], marker_color='#22c55e'))
-        dev_fig.update_layout(barmode='group', title="Goal Deviations — How Far Off Were We?",
-                               yaxis_title="Deviation Amount")
-        st.plotly_chart(dev_fig, use_container_width=True)
-        st.caption("✅ A deviation of ~0 means the goal was exactly met. The GP solver minimised d₁⁻ + d₂⁺ + d₃⁺ — it's OK for d⁺ of production to be large (exceeding production target is fine!).")
+        # ── Deviation & Target Fulfillment Analysis ─────────────────────────
+        st.markdown("### 📉 GP Goal Fulfillment & Deviation Analysis")
+
+        col_dev1, col_dev2 = st.columns(2)
+
+        with col_dev1:
+            # Chart 1: Target vs Achieved Comparison (%)
+            prod_pct = (gp_total_prod / target_prod * 100) if target_prod > 0 else 0
+            fert_pct = (gp_fert_used / target_fert * 100) if target_fert > 0 else 0
+            pest_pct = (gp_pest_used / target_pest * 100) if target_pest > 0 else 0
+
+            fig_goal_pct = go.Figure()
+            fig_goal_pct.add_trace(go.Bar(
+                name='Target Set (100%)',
+                x=['Production Goal', 'Fertilizer Goal', 'Pesticide Goal'],
+                y=[100, 100, 100],
+                marker_color='#94a3b8'
+            ))
+            fig_goal_pct.add_trace(go.Bar(
+                name='Achieved by GP (%)',
+                x=['Production Goal', 'Fertilizer Goal', 'Pesticide Goal'],
+                y=[prod_pct, fert_pct, pest_pct],
+                marker_color=['#22c55e' if prod_pct >= 100 else '#f59e0b',
+                              '#22c55e' if fert_pct <= 100 else '#ef4444',
+                              '#22c55e' if pest_pct <= 100 else '#ef4444'],
+                text=[f"{prod_pct:.1f}%", f"{fert_pct:.1f}%", f"{pest_pct:.1f}%"],
+                textposition='outside'
+            ))
+            fig_goal_pct.update_layout(
+                barmode='group',
+                title="Goal Achievement Rate (% of Target Met)",
+                yaxis=dict(title="Percentage (%)", range=[0, max(130, prod_pct+10, fert_pct+10, pest_pct+10)]),
+                height=350
+            )
+            st.plotly_chart(fig_goal_pct, use_container_width=True)
+
+        with col_dev2:
+            # Chart 2: Unwanted Deviation Values (d1-, d2+, d3+)
+            dev_fig = go.Figure()
+            dev_fig.add_trace(go.Bar(
+                name='Under-achievement (d⁻)',
+                x=['Production (d₁⁻)', 'Fertilizer (d₂⁻)', 'Pesticide (d₃⁻)'],
+                y=[d1m, d2m, d3m],
+                marker_color='#ef4444',
+                text=[f"{d1m:,.0f}", f"{d2m:,.0f}", f"{d3m:,.0f}"],
+                textposition='outside'
+            ))
+            dev_fig.add_trace(go.Bar(
+                name='Over-achievement (d⁺)',
+                x=['Production (d₁⁺)', 'Fertilizer (d₂⁺)', 'Pesticide (d₃⁺)'],
+                y=[d1p, d2p, d3p],
+                marker_color='#22c55e',
+                text=[f"{d1p:,.0f}", f"{d2p:,.0f}", f"{d3p:,.0f}"],
+                textposition='outside'
+            ))
+            dev_fig.update_layout(
+                barmode='group',
+                title="Raw Goal Deviations (d⁻ and d⁺)",
+                yaxis_title="Units (tons / kg)",
+                height=350
+            )
+            st.plotly_chart(dev_fig, use_container_width=True)
+
+        st.info("""
+💡 **Understanding GP Deviations:**
+- **Zero Unwanted Deviation ($d_1^- = 0, d_2^+ = 0, d_3^+ = 0$) is the PERFECT outcome!** It means Goal Programming successfully satisfied all your target constraints without falling short on production or overshooting chemical budgets.
+- **$d_1^-$ (Production Shortfall):** We penalize falling short of target production. If $d_1^- = 0$, production target was met or exceeded.
+- **$d_2^+$ & $d_3^+$ (Chemical Overshoot):** We penalize exceeding fertilizer/pesticide limits. If $d_2^+ = 0, d_3^+ = 0$, chemical limits were respected.
+- **$d_1^+$ (Exceeding Production Target):** Over-producing beyond the goal is GOOD in agriculture, so $d_1^+$ is not penalized in the objective function ($Z_{GP}$).
+        """)
 
         # ── Binding Constraints Analysis ────────────────────────────────────
         st.markdown("### 🔗 Which Constraints Were Binding? (LP Sensitivity)")
