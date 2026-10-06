@@ -45,11 +45,12 @@ with st.sidebar:
             "5. Linear Programming",
             "6. Goal Programming",
             "7. Final Dashboard",
-            "8. Team Contribution"
+            "8. Crop Advisory & Recommendation",
+            "9. Team Contribution"
         ],
         icons=[
             "house", "book", "bar-chart-line", "diagram-3", 
-            "graph-up", "bullseye", "laptop", "people"
+            "graph-up", "bullseye", "laptop", "lightbulb", "people"
         ],
         default_index=0,
         styles={
@@ -601,20 +602,38 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
 
         # ── Land Allocation Chart ──────────────────────────────────────────
         st.markdown("### 📊 Land Allocation Comparison")
-        fig_alloc = go.Figure()
-        fig_alloc.add_trace(go.Bar(name='LP Allocation (ha)', x=selected_crops,
-                                   y=[lp_results[c] for c in selected_crops],
-                                   marker_color='#3b82f6', text=[f"{lp_results[c]:,.0f}" for c in selected_crops],
-                                   textposition='outside'))
-        fig_alloc.add_trace(go.Bar(name='GP Allocation (ha)', x=selected_crops,
-                                   y=[gp_results[c] for c in selected_crops],
-                                   marker_color='#f97316', text=[f"{gp_results[c]:,.0f}" for c in selected_crops],
-                                   textposition='outside'))
-        fig_alloc.update_layout(barmode='group', title="Optimal Land Allocation per Crop (Hectares)",
-                                xaxis_tickangle=-30, height=420,
-                                annotations=[dict(text="LP concentrates land; GP distributes across crops",
-                                                  showarrow=False, xref='paper', yref='paper', x=0.5, y=1.1)])
-        st.plotly_chart(fig_alloc, use_container_width=True)
+        col_chart1, col_chart2 = st.columns([1.2, 1])
+
+        with col_chart1:
+            fig_alloc = go.Figure()
+            fig_alloc.add_trace(go.Bar(name='LP Allocation (ha)', x=selected_crops,
+                                       y=[lp_results[c] for c in selected_crops],
+                                       marker_color='#3b82f6', text=[f"{lp_results[c]:,.0f}" for c in selected_crops],
+                                       textposition='outside'))
+            fig_alloc.add_trace(go.Bar(name='GP Allocation (ha)', x=selected_crops,
+                                       y=[gp_results[c] for c in selected_crops],
+                                       marker_color='#f97316', text=[f"{gp_results[c]:,.0f}" for c in selected_crops],
+                                       textposition='outside'))
+            fig_alloc.update_layout(barmode='group', title="Optimal Land Allocation per Crop (Hectares)",
+                                    xaxis_tickangle=-30, height=420)
+            st.plotly_chart(fig_alloc, use_container_width=True)
+
+        with col_chart2:
+            # Donut chart for GP Land Allocation Percentage (%)
+            gp_pie_labels = [c for c in selected_crops if gp_results[c] > 0]
+            gp_pie_values = [gp_results[c] for c in selected_crops if gp_results[c] > 0]
+            if sum(gp_pie_values) > 0:
+                fig_pie = go.Figure(data=[go.Pie(
+                    labels=gp_pie_labels,
+                    values=gp_pie_values,
+                    hole=0.4,
+                    textinfo='label+percent',
+                    insidetextorientation='radial'
+                )])
+                fig_pie.update_layout(title="GP Land Allocation Share (%)", height=420)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("No land allocated by GP.")
 
         # ── Resource Utilization ───────────────────────────────────────────
         st.markdown("### 🏭 Resource Utilization")
@@ -805,7 +824,7 @@ $$Z_{{GP}} = d_1^- + d_2^+ + d_3^+$$
         })
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
-        # ── Final Interpretation ────────────────────────────────────────────
+        # ── Final Interpretation & Novelty ──────────────────────────────────
         st.markdown("### 📝 Analysis & Interpretation")
         best_lp_crop = max(selected_crops, key=lambda c: lp_results[c])
         best_gp_crop = max(selected_crops, key=lambda c: gp_results[c])
@@ -818,18 +837,178 @@ This is mathematically optimal but not practically diverse. In real farming, you
 **Goal Programming (GP):**
 GP is a balanced planner. With your targets set to {target_prod:,.0f} tons production, {target_fert:,.0f} kg fertilizer,
 and {target_pest:,.0f} kg pesticide, GP found a plan that achieves **{gp_total_prod:,.0f} tons** while staying as close
-as possible to all three goals simultaneously. The diversity slider ({diversity_pct}%) ensured that each crop got at least
-some land, making the plan realistic for a farmer.
+as possible to all goals simultaneously. Land is distributed across crops to maintain cropping pattern stability.
 
 **Key Insight for Final Review:** LP gives you the theoretical maximum. GP gives you the practical optimum that
-a real farmer would actually implement — balancing yield, cost, and sustainability.
+a real farmer or policy maker would actually implement — balancing yield, cost, and sustainability.
         """)
 
+        st.markdown("---")
+        st.markdown("### 💎 Research Novelty & Target Stakeholders")
+        n_col1, n_col2 = st.columns(2)
+        with n_col1:
+            st.markdown("""
+            #### 🚀 Project Novelty & Innovation
+            - **Dynamic Coefficient Derivation:** Coefficients are calculated dynamically per State × Season × Year directly from historical data.
+            - **Cropping Pattern Balancing GP Algorithm:** Resolves the classic LP monoculture trap by embedding historical land-share goals into GP equations.
+            - **Hybrid Optimization Spectrum:** Allows users to compare theoretical maximum (LP) vs. practical multi-objective optimum (GP) side-by-side.
+            """)
+        with n_col2:
+            st.markdown("""
+            #### 🎯 Target Stakeholders & Utility
+            - **State Agriculture Departments & Policy Makers:** For regional fertilizer subsidy planning & production goal setting.
+            - **Farmers' Cooperatives & Agronomists:** For land diversification, risk reduction, and sowing recommendations.
+            - **Agricultural Economists:** For analyzing trade-offs between yield maximization and chemical reduction.
+            """)
 
 
-# --- 8. Team Contribution ---
+# --- 8. Crop Advisory & Recommendation ---
+elif nav == "8. Crop Advisory & Recommendation":
+    st.markdown('<p class="section-header">🌾 Crop Recommendation & Smart Advisory System</p>', unsafe_allow_html=True)
+    st.info("💡 **Decision Support System for Farmers & Policy Makers:** Enter your region and available land to get instant data-driven crop recommendations, target benchmarks, and land allocation advice.")
 
-elif nav == "8. Team Contribution":
+    try:
+        df = pd.read_csv("crop_yield.csv")
+        df['Season'] = df['Season'].str.strip()
+        df['State']  = df['State'].str.strip()
+        df['Crop']   = df['Crop'].str.strip()
+    except FileNotFoundError:
+        st.error("Dataset not found!")
+        st.stop()
+
+    adv_states = sorted(df['State'].dropna().unique())
+    adv_seasons = sorted(df['Season'].dropna().unique())
+    adv_years = sorted(df['Crop_Year'].dropna().astype(int).unique())
+
+    a1, a2, a3, a4 = st.columns(4)
+    adv_state = a1.selectbox("📍 Region / State", adv_states, key="adv_state")
+    adv_season = a2.selectbox("🌾 Season", adv_seasons, key="adv_season")
+    adv_year = a3.selectbox("📅 Base Year", adv_years, index=len(adv_years)-1, key="adv_year")
+    adv_land = a4.number_input("📐 Total Land Available (Hectares)", min_value=10.0, value=5000.0, step=100.0)
+
+    df_adv = df[(df['State'] == adv_state) & (df['Season'] == adv_season) & (df['Crop_Year'] == adv_year)]
+    adv_crops = sorted(df_adv['Crop'].dropna().unique())
+
+    if not adv_crops:
+        st.warning(f"No historical crop data available for {adv_state} / {adv_season} / {adv_year}.")
+        st.stop()
+
+    st.markdown("---")
+    st.markdown("### 🌟 Smart Recommended Sowing Portfolio")
+
+    # Compute parameters for all available crops
+    adv_params = {}
+    for crop in adv_crops:
+        cd = df_adv[df_adv['Crop'] == crop]
+        yld = float(cd['Yield'].mean()) if not cd['Yield'].empty else 1.0
+        area = float(cd['Area'].mean()) if not cd['Area'].empty else 1.0
+        prod = float(cd['Production'].mean()) if not cd['Production'].empty else 0.0
+        fert = float(cd['Fertilizer'].mean()) if not cd['Fertilizer'].empty else 0.0
+        pest = float(cd['Pesticide'].mean()) if not cd['Pesticide'].empty else 0.0
+        fpha = fert / area if area > 0 else 50.0
+        ppha = pest / area if area > 0 else 5.0
+        adv_params[crop] = {
+            'Yield': yld if not np.isnan(yld) else 1.0,
+            'Fertilizer': fpha if not np.isnan(fpha) else 50.0,
+            'Pesticide': ppha if not np.isnan(ppha) else 5.0,
+            'Area': area, 'Production': prod
+        }
+
+    # Run quick optimization for advisory
+    from scipy.optimize import linprog
+    n_adv = len(adv_crops)
+    adv_yields = np.array([adv_params[c]['Yield'] for c in adv_crops])
+    adv_ferts = np.array([adv_params[c]['Fertilizer'] for c in adv_crops])
+    adv_pests = np.array([adv_params[c]['Pesticide'] for c in adv_crops])
+    adv_areas = np.array([adv_params[c]['Area'] for c in adv_crops])
+
+    rec_total_area = adv_areas.sum()
+    target_crop_areas_a = adv_land * (adv_areas / max(rec_total_area, 1.0))
+    rec_target_prod = float(adv_yields @ target_crop_areas_a)
+    rec_target_fert = float(adv_ferts @ target_crop_areas_a)
+    rec_target_pest = float(adv_pests @ target_crop_areas_a)
+
+    # Multi-Goal GP Advisory Run
+    nv_a = n_adv + 6 + 2 * n_adv
+    gp_c_a = np.zeros(nv_a)
+    gp_c_a[n_adv]   = 10.0 / max(rec_target_prod, 1.0)
+    gp_c_a[n_adv+3] = 10.0 / max(rec_target_fert, 1.0)
+    gp_c_a[n_adv+5] = 10.0 / max(rec_target_pest, 1.0)
+
+    for i in range(n_adv):
+        w_c = 1.0 / max(target_crop_areas_a[i], 1.0)
+        gp_c_a[n_adv + 6 + 2*i]     = w_c
+        gp_c_a[n_adv + 6 + 2*i + 1] = w_c
+
+    gp_A_ub_a = np.zeros((1, nv_a)); gp_A_ub_a[0, :n_adv] = 1
+    gp_b_ub_a = [adv_land]
+
+    gp_A_eq_a = np.zeros((3 + n_adv, nv_a))
+    gp_A_eq_a[0, :n_adv] = adv_yields; gp_A_eq_a[0, n_adv]   = 1; gp_A_eq_a[0, n_adv+1] = -1
+    gp_A_eq_a[1, :n_adv] = adv_ferts;  gp_A_eq_a[1, n_adv+2] = 1; gp_A_eq_a[1, n_adv+3] = -1
+    gp_A_eq_a[2, :n_adv] = adv_pests;  gp_A_eq_a[2, n_adv+4] = 1; gp_A_eq_a[2, n_adv+5] = -1
+
+    for i in range(n_adv):
+        gp_A_eq_a[3 + i, i]               = 1
+        gp_A_eq_a[3 + i, n_adv + 6 + 2*i]     = 1
+        gp_A_eq_a[3 + i, n_adv + 6 + 2*i + 1] = -1
+
+    gp_b_eq_a = [rec_target_prod, rec_target_fert, rec_target_pest] + list(target_crop_areas_a)
+    gp_res_a = linprog(gp_c_a, A_ub=gp_A_ub_a, b_ub=gp_b_ub_a, A_eq=gp_A_eq_a, b_eq=gp_b_eq_a, bounds=[(0, None)]*nv_a, method='highs')
+
+    adv_alloc = gp_res_a.x[:n_adv] if gp_res_a.success else target_crop_areas_a
+
+    # Advisory Display Columns
+    col_rec1, col_rec2 = st.columns(2)
+    with col_rec1:
+        st.markdown("#### 🥇 Pure Maximization Strategy (LP)")
+        top_lp_idx = np.argmax(adv_yields)
+        st.success(f"**Top Recommended Crop:** `{adv_crops[top_lp_idx]}`\n\n"
+                   f"- **Recommended Allocation:** {adv_land:,.0f} ha (100% of Land)\n"
+                   f"- **Expected Production:** {adv_yields[top_lp_idx] * adv_land:,.0f} tons\n"
+                   f"- **Best For:** Commercial monoculture & maximum total yield output.")
+
+    with col_rec2:
+        st.markdown("#### 🛡️ Balanced Diversified Strategy (GP)")
+        top_gp_indices = np.argsort(adv_alloc)[::-1][:min(3, n_adv)]
+        top_gp_crops_str = ", ".join([f"`{adv_crops[i]}` ({adv_alloc[i]/adv_land*100:.1f}%)" for i in top_gp_indices])
+        st.info(f"**Top Recommended Crop Mix:** {top_gp_crops_str}\n\n"
+                f"- **Recommended Allocation:** Distributed across {sum(1 for a in adv_alloc if a > 1)} crops\n"
+                f"- **Expected Production:** {adv_yields @ adv_alloc:,.0f} tons\n"
+                f"- **Best For:** Risk mitigation, food security, and soil preservation.")
+
+    st.markdown("---")
+    st.markdown("### 📋 Recommended Crop Sowing Table")
+    adv_df = pd.DataFrame({
+        'Crop Name': adv_crops,
+        'Recommended Area (ha)': [adv_alloc[i] for i in range(n_adv)],
+        'Land Share (%)': [(adv_alloc[i] / adv_land * 100) for i in range(n_adv)],
+        'Expected Yield (tons/ha)': [adv_yields[i] for i in range(n_adv)],
+        'Estimated Production (tons)': [adv_yields[i] * adv_alloc[i] for i in range(n_adv)],
+        'Fertilizer Footprint (kg)': [adv_ferts[i] * adv_alloc[i] for i in range(n_adv)],
+    })
+    st.dataframe(adv_df.sort_values(by='Recommended Area (ha)', ascending=False).style.format({
+        'Recommended Area (ha)': '{:,.1f}',
+        'Land Share (%)': '{:.2f}%',
+        'Expected Yield (tons/ha)': '{:.2f}',
+        'Estimated Production (tons)': '{:,.1f}',
+        'Fertilizer Footprint (kg)': '{:,.1f}'
+    }), use_container_width=True, hide_index=True)
+
+    # Pie Chart of Advisory Land Allocation
+    fig_adv_pie = go.Figure(data=[go.Pie(
+        labels=[c for i, c in enumerate(adv_crops) if adv_alloc[i] > 1],
+        values=[adv_alloc[i] for i in range(n_adv) if adv_alloc[i] > 1],
+        hole=0.4,
+        textinfo='label+percent'
+    )])
+    fig_adv_pie.update_layout(title=f"Recommended Crop Portfolio Distribution for {adv_state} ({adv_season} {adv_year})", height=450)
+    st.plotly_chart(fig_adv_pie, use_container_width=True)
+
+
+# --- 9. Team Contribution ---
+
+elif nav == "9. Team Contribution":
     st.markdown('<p class="section-header">👥 Meet the Team</p>', unsafe_allow_html=True)
     
     st.markdown("""
@@ -842,6 +1021,6 @@ elif nav == "8. Team Contribution":
     """)
     
     st.markdown("---")
-    st.markdown("### 🏁 First Review Boundary")
-    st.write("We have successfully identified the dataset, cleaned the data, established the research methodology, and formulated both the Linear Programming and Goal Programming approaches mathematically.")
-    st.write("In the final review, we will present the fully functional optimization engine integrated directly into this dashboard.")
+    st.markdown("### 🏁 Project Completion Status")
+    st.write("We have successfully built, debugged, and deployed the complete Operations Research Crop Planning System featuring Linear Programming, Goal Programming, Data-Driven Parameter Engine, and Smart Advisory System.")
+
