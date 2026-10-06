@@ -428,16 +428,6 @@ elif nav == "7. Final Dashboard":
                                  value=float(max(rec_pest, 10)), step=1000.0,
                                  help=f"Historical: {rec_pest:,.0f} kg")
 
-    st.markdown("#### ⚖️ Linear Programming Strategy")
-    lp_strategy = st.radio(
-        "Select Linear Programming Strategy:",
-        [
-            "🎯 Standard Unweighted LP (Maximize Total Production Tonnage — Z = Σ Yield_i · x_i)",
-            "💰 Weighted Efficiency LP (Maximize Weighted Yield per Chemical Unit — Z = Σ [Yield_i / Fert_i] · x_i)"
-        ],
-        index=0
-    )
-
     # ── STEP 6: GP Targets ────────────────────────────────────────────────
     st.markdown("### 🎯 Step 6 — Set Goal Programming Targets & Strategy")
     st.caption("GP balances multiple conflicting goals simultaneously: hitting production target, staying within chemical limits, AND maintaining crop diversity.")
@@ -503,13 +493,8 @@ elif nav == "7. Final Dashboard":
         # ── LINEAR PROGRAMMING ────────────────────────────────────────────
         min_alloc = (diversity_pct / 100.0) * max_land / n
 
-        if "Weighted" in lp_strategy:
-            # Weighted Yield per Fertilizer Unit Objective
-            lp_weights = yields / np.maximum(ferts, 1.0)
-            lp_c = -(yields * lp_weights)
-        else:
-            # Standard Unweighted Tonnage Objective
-            lp_c = -yields
+        # Standard LP Tonnage Objective (Maximize Total Production)
+        lp_c = -yields
 
         lp_A      = np.vstack([np.ones(n), ferts, pests])
         lp_b      = [max_land, max_fert, max_pest]
@@ -533,14 +518,14 @@ elif nav == "7. Final Dashboard":
                 prob = pulp.LpProblem("PuLP_Goal_Programming", pulp.LpMinimize)
                 
                 lb_val = float(min_alloc) if min_alloc is not None else 0.0
-                x_vars = {c: pulp.LpVariable(f"x_{i}", lb_val, None, pulp.LpContinuous) for i, c in enumerate(selected_crops)}
+                x_vars = {c: pulp.LpVariable(name=f"x_{i}", lowBound=lb_val, upBound=None, cat=pulp.LpContinuous) for i, c in enumerate(selected_crops)}
                 
-                d1_minus = pulp.LpVariable("d1_minus", 0.0, None, pulp.LpContinuous)
-                d1_plus  = pulp.LpVariable("d1_plus", 0.0, None, pulp.LpContinuous)
-                d2_minus = pulp.LpVariable("d2_minus", 0.0, None, pulp.LpContinuous)
-                d2_plus  = pulp.LpVariable("d2_plus", 0.0, None, pulp.LpContinuous)
-                d3_minus = pulp.LpVariable("d3_minus", 0.0, None, pulp.LpContinuous)
-                d3_plus  = pulp.LpVariable("d3_plus", 0.0, None, pulp.LpContinuous)
+                d1_minus = pulp.LpVariable(name="d1_minus", lowBound=0.0, upBound=None, cat=pulp.LpContinuous)
+                d1_plus  = pulp.LpVariable(name="d1_plus", lowBound=0.0, upBound=None, cat=pulp.LpContinuous)
+                d2_minus = pulp.LpVariable(name="d2_minus", lowBound=0.0, upBound=None, cat=pulp.LpContinuous)
+                d2_plus  = pulp.LpVariable(name="d2_plus", lowBound=0.0, upBound=None, cat=pulp.LpContinuous)
+                d3_minus = pulp.LpVariable(name="d3_minus", lowBound=0.0, upBound=None, cat=pulp.LpContinuous)
+                d3_plus  = pulp.LpVariable(name="d3_plus", lowBound=0.0, upBound=None, cat=pulp.LpContinuous)
                 
                 prob += pulp.lpSum([x_vars[c] for c in selected_crops]) <= float(max_land), "Land_Limit"
                 prob += pulp.lpSum([float(params[c]['Yield']) * x_vars[c] for c in selected_crops]) + d1_minus - d1_plus == float(target_prod), "Prod_Goal"
@@ -753,9 +738,9 @@ $$Z_{{LP}} = \sum (Yield_i \cdot x_i) = {lp_obj_terms}$$
 |---|---|---|---|
 """ + "\n".join([f"| x_{i+1} | **{c}** | {lp_results[c]:,.2f} ha | {(lp_results[c]/max(lp_land_used,1)*100):.1f}% |" for i, c in enumerate(selected_crops)]) + f"""
 
-💡 **Weighted LP vs Goal Programming Weights:**
-- **Can we use weights in Linear Programming?** YES! In Weighted Linear Programming, the objective is $Z = \sum (w_i \cdot Yield_i \cdot x_i)$ where $w_i = \text{{Market Price}}_i$ or $\text{{Priority}}_i$.
-- **Key Difference:** In LP, weights directly multiply *production decision variables ($x_i$)* to maximize total revenue or nutritional value. In Goal Programming, weights multiply *deviation variables ($d_k^-, d_k^+$)* to penalize missing target goals!
+💡 **Linear Programming vs Goal Programming Formulation:**
+- **Linear Programming:** Focuses on single-objective maximization ($Z_{LP} = \sum Yield_i \cdot x_i$) under hard upper bound constraints (Land, Fertilizer, Pesticide).
+- **Goal Programming:** Focuses on multi-objective target balancing by minimizing weighted penalty deviations ($Z_{GP} = \sum w_k \cdot d_k$) from target goals.
             """)
 
         with st.expander("🎯 GP Objective Function, Goal Constraints & Variable Values — Expanded", expanded=True):
