@@ -444,8 +444,8 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
                                  help=f"Historical: {rec_pest:,.0f} kg")
 
     # ── STEP 6: GP Targets ────────────────────────────────────────────────
-    st.markdown("### 🎯 Step 6 — Set Goal Programming Targets")
-    st.caption("GP tries to **reach** these targets, not just stay under them. It minimises deviation from each goal.")
+    st.markdown("### 🎯 Step 6 — Set Goal Programming Targets & Strategy")
+    st.caption("GP balances multiple conflicting goals simultaneously: hitting production target, staying within chemical limits, AND maintaining crop diversity.")
     g1, g2, g3 = st.columns(3)
     target_prod = g1.number_input("🌾 Target Production (tons) [Goal 1]", min_value=100.0,
                                    value=float(max(rec_prod * 0.9, 100)), step=1000.0,
@@ -457,16 +457,25 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
                                    value=float(max(rec_pest * 0.8, 10)), step=500.0,
                                    help=f"Recommended: {rec_pest*0.8:,.0f} kg (20% reduction from historical)")
 
-    # Diversity slider — KEY FIX for GP
-    st.markdown("#### 🌈 Crop Diversity Control (for Goal Programming)")
-    diversity_pct = st.slider(
-        "Minimum land allocation per crop (%)",
-        min_value=0, max_value=30, value=5, step=1,
-        help="This forces GP to allocate at least this % of total land to EACH selected crop. "
-             "Set to 0 for pure mathematical optimum (1-2 crops). Set to 10-15% for realistic diverse farming."
+    st.markdown("#### ⚖️ Goal Programming Mode")
+    gp_strategy = st.radio(
+        "Select Goal Weighting Strategy:",
+        [
+            "🌾 Multi-Goal Cropping Pattern Balancing (Recommended — Allocates land across ALL crops based on historical shares)",
+            "🎯 Global Goals Only (Production & Chemical Targets — May converge on 1-2 efficient crops)"
+        ],
+        index=0,
+        help="Multi-Goal mode adds goal constraints for every crop's land share, preventing monoculture dominance!"
     )
-    st.caption(f"➡️ With {len(selected_crops)} crops and {diversity_pct}% minimum, each crop gets at least "
-               f"**{diversity_pct/100 * max_land / len(selected_crops):,.0f} ha** guaranteed.")
+    use_multi_crop_goals = "Multi-Goal" in gp_strategy
+
+    # Diversity slider
+    st.markdown("#### 🌈 Additional Crop Diversity Floor (Minimum % per crop)")
+    diversity_pct = st.slider(
+        "Minimum guaranteed land allocation per crop (%)",
+        min_value=0, max_value=25, value=2, step=1,
+        help="Sets a hard minimum land bound for every selected crop."
+    )
 
     # ── RUN ───────────────────────────────────────────────────────────────
     if st.button("🚀 Run Operations Research Solvers", use_container_width=True, type="primary"):
@@ -476,6 +485,14 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
         yields = np.array([params[c]['Yield']      for c in selected_crops])
         ferts  = np.array([params[c]['Fertilizer'] for c in selected_crops])
         pests  = np.array([params[c]['Pesticide']  for c in selected_crops])
+        hist_areas = np.array([params[c]['Area_hist'] for c in selected_crops])
+        sum_hist_area = hist_areas.sum()
+
+        # Calculate target land allocation per crop based on historical shares
+        if sum_hist_area > 0:
+            target_crop_areas = max_land * (hist_areas / sum_hist_area)
+        else:
+            target_crop_areas = np.full(n, max_land / n)
 
         # ── LINEAR PROGRAMMING ────────────────────────────────────────────
         # Maximize: Z = Σ yield_i · x_i  →  Minimize: -Z
@@ -495,28 +512,62 @@ The historical Fertilizer and Pesticide **totals** below show the actual dataset
         lp_land_used   = float(lp_alloc.sum())
 
         # ── GOAL PROGRAMMING ──────────────────────────────────────────────
-        # Variables: x_0..x_{n-1}, d1-(n), d1+(n+1), d2-(n+2), d2+(n+3), d3-(n+4), d3+(n+5)
-        # Minimize: d1- + d2+ + d3+
-        nv       = n + 6
-        gp_c     = np.zeros(nv)
-        gp_c[n]   = 1    # d1- : under-achieve production (bad)
-        gp_c[n+3] = 1    # d2+ : over-shoot fertilizer target (bad)
-        gp_c[n+5] = 1    # d3+ : over-shoot pesticide target (bad)
+        if use_multi_crop_goals:
+            # Multi-Goal GP: Total Production + Total Fert + Total Pest + N Crop Land Goals
+            # Variables: x_0..x_{n-1}, d1-, d1+, d2-, d2+, d3-, d3+, and for each crop i: d_{i,c}-, d_{i,c}+
+            nv = n + 6 + 2 * n
+            gp_c = np.zeros(nv)
+            
+            # Global goal penalty weights (normalized)
+            gp_c[n]   = 10.0 / max(target_prod, 1.0)   # d1- : under-achieve production
+            gp_c[n+3] = 10.0 / max(target_fert, 1.0)   # d2+ : over-shoot fertilizer
+            gp_c[n+5] = 10.0 / max(target_pest, 1.0)   # d3+ : over-shoot pesticide
 
-        # Land constraint: Σ x_i <= max_land
-        gp_A_ub = np.zeros((1, nv)); gp_A_ub[0, :n] = 1
-        gp_b_ub = [max_land]
+            # Crop land goal penalty weights
+            for i in range(n):
+                w_c = 1.0 / max(target_crop_areas[i], 1.0)
+                gp_c[n + 6 + 2*i]     = w_c   # d_{i,c}- : under-allocate land to crop i
+                gp_c[n + 6 + 2*i + 1] = w_c   # d_{i,c}+ : over-allocate land to crop i
 
-        # Goal equality constraints
-        gp_A_eq = np.zeros((3, nv))
-        gp_A_eq[0, :n] = yields; gp_A_eq[0, n]   =  1; gp_A_eq[0, n+1] = -1   # prod goal
-        gp_A_eq[1, :n] = ferts;  gp_A_eq[1, n+2] =  1; gp_A_eq[1, n+3] = -1   # fert goal
-        gp_A_eq[2, :n] = pests;  gp_A_eq[2, n+4] =  1; gp_A_eq[2, n+5] = -1   # pest goal
-        gp_b_eq = [target_prod, target_fert, target_pest]
+            # Inequality constraint: Total Land <= max_land
+            gp_A_ub = np.zeros((1, nv)); gp_A_ub[0, :n] = 1
+            gp_b_ub = [max_land]
 
-        # Diversity: minimum allocation per crop
-        min_alloc = (diversity_pct / 100.0) * max_land / n
-        gp_bounds = [(min_alloc, None)] * n + [(0, None)] * 6
+            # Equality constraints: 3 global goals + n crop land goals
+            gp_A_eq = np.zeros((3 + n, nv))
+            gp_A_eq[0, :n] = yields; gp_A_eq[0, n]   =  1; gp_A_eq[0, n+1] = -1  # prod goal
+            gp_A_eq[1, :n] = ferts;  gp_A_eq[1, n+2] =  1; gp_A_eq[1, n+3] = -1  # fert goal
+            gp_A_eq[2, :n] = pests;  gp_A_eq[2, n+4] =  1; gp_A_eq[2, n+5] = -1  # pest goal
+
+            for i in range(n):
+                gp_A_eq[3 + i, i]               = 1
+                gp_A_eq[3 + i, n + 6 + 2*i]     = 1   # d_{i,c}-
+                gp_A_eq[3 + i, n + 6 + 2*i + 1] = -1  # d_{i,c}+
+
+            gp_b_eq = [target_prod, target_fert, target_pest] + list(target_crop_areas)
+
+            min_alloc = (diversity_pct / 100.0) * max_land / n
+            gp_bounds = [(min_alloc, None)] * n + [(0, None)] * (6 + 2*n)
+
+        else:
+            # Global Goals Only GP
+            nv = n + 6
+            gp_c = np.zeros(nv)
+            gp_c[n]   = 1    # d1-
+            gp_c[n+3] = 1    # d2+
+            gp_c[n+5] = 1    # d3+
+
+            gp_A_ub = np.zeros((1, nv)); gp_A_ub[0, :n] = 1
+            gp_b_ub = [max_land]
+
+            gp_A_eq = np.zeros((3, nv))
+            gp_A_eq[0, :n] = yields; gp_A_eq[0, n]   =  1; gp_A_eq[0, n+1] = -1
+            gp_A_eq[1, :n] = ferts;  gp_A_eq[1, n+2] =  1; gp_A_eq[1, n+3] = -1
+            gp_A_eq[2, :n] = pests;  gp_A_eq[2, n+4] =  1; gp_A_eq[2, n+5] = -1
+            gp_b_eq = [target_prod, target_fert, target_pest]
+
+            min_alloc = (diversity_pct / 100.0) * max_land / n
+            gp_bounds = [(min_alloc, None)] * n + [(0, None)] * 6
 
         gp_res = linprog(gp_c, A_ub=gp_A_ub, b_ub=gp_b_ub,
                          A_eq=gp_A_eq, b_eq=gp_b_eq,
