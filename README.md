@@ -2,7 +2,7 @@
 
 **Operations Research: Linear & Goal Programming Approach**
 
-This repository contains the First Review and Final Implementation files for our Agricultural Operations Research project. The project aims to build a mathematical decision-support system that helps farmers optimally allocate cultivable land among various crops while strictly adhering to resource limitations (land, fertilizer, pesticide).
+This repository contains the First Review and Final Implementation files for our Agricultural Operations Research project. The project aims to build a mathematical decision-support system that helps farmers optimally allocate cultivable land among various crops while strictly adhering to resource limitations (land, fertilizer,pesticide).
 
 ## 📖 Repository Description
 This repository serves as the complete codebase and documentation for our **Operations Research (OR) Project: Optimal Agricultural Crop Planning**. 
