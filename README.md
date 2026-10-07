@@ -12,11 +12,11 @@ Agriculture in India is highly constrained by limited cultivable land, strict fe
 The ultimate goal of this repository is to provide a deployable **Decision-Support System (via Streamlit)** that empowers farmers and agricultural planners to maximize their crop production while safely balancing environmental and resource limits.
 
 ## 📊 About the Data & Optimization
-Traditional crop planning often relies on intuition. By using **Operations Research (OR)**, we can mathematically guarantee the most efficient use of resources. We use 23 years of historical Indian agricultural data to extract yield and resource parameters. 
+Traditional crop planning often relies on intuition. By using **Operations Research (OR)**, we can mathematically guarantee the most efficient use of resources. We use 23 yearsof historical Indian agricultural data to extract yield and resource parameters. 
 
 Our optimization engine utilizes:
 1. **Linear Programming (LP):** To find the absolute maximum theoretical production.
-2. **Goal Programming (GP):** To balance multiple, often conflicting real-world targets (e.g., hitting a specific production quota while strictly minimizing chemical/pesticide usage).
+2. **Goal Programming (GP):** To balance multiple, often conflicting real-world targets (e.g., hitting a specific production quota while strictly minimizing chemical OR pesticide usage).
 
 ## 🚀 Live Dashboard
 An interactive Streamlit dashboard is built to make the optimization accessible to non-technical users.
